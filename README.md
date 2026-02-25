@@ -69,4 +69,4 @@ Contributions are what make the open-source community such an amazing place to l
 
 ## 📈 Monetization & Support
 This project is Open Source. If you want to support development:
-* **Save 10% on Trading Fees:** Register on Binance using our [Referral Link](https://www.binance.com/activity/referral-entry/CPA?ref=CPA_000RJSUT5M).*
+* **Save 10% on Trading Fees:** Register on Binance using our [Referral Link](https://www.binance.com/activity/referral-entry/CPA?ref=CPA_000RJSUT5M).
