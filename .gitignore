@@ -207,14 +207,10 @@ marimo/_lsp/
 __marimo__/
 
 # --- ShieldTrade-CE Specific Data ---
-# Sensitive state and trade history
-estado_bot.json
-historial_trading.csv
-
-# Logs folder
-logs/
+bot_state.json
+trading_history.csv
+logs/*.log
 bot_core/logs/
-
-# Binance Keys (Just in case you create a keys.py)
 keys.py
 .env
+.python-version
