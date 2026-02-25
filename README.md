@@ -50,6 +50,15 @@ The system consists of two main components:
 - [ ] **V4.1:** Integration with FastAPI for remote monitoring.
 - [ ] **V5.0:** Mobile App release and Cloudflare Tunnel support.
 
+## 🎓 Maintenance & Development Status
+**ShieldTrade-CE** is a personal learning project and a hobby.
+
+* **Academic Priority:** The lead developer is a university student. Academic responsibilities are the top priority, so development happens exclusively during free time.
+* **Release Cycle:** There is no fixed schedule for updates. New features or versions (like the upcoming V4.1) will be released as time and studies permit.
+* **Expectations:** While I am passionate about this project, please understand that responses to issues or pull requests may be delayed.
+
+*This project is a journey of learning and experimentation, not a commercial product.*
+
 ## ⚠️ Disclaimer (DYOR)
 **Trading cryptocurrencies involves significant risk.** ShieldTrade-CE is an experimental tool provided "as is" for educational purposes. By using this software, you acknowledge that:
 
@@ -68,15 +77,6 @@ Contributions are what make the open-source community such an amazing place to l
 3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
-## 🎓 Maintenance & Development Status
-**ShieldTrade-CE** is a personal learning project and a hobby.
-
-* **Academic Priority:** The lead developer is a university student. Academic responsibilities are the top priority, so development happens exclusively during free time.
-* **Release Cycle:** There is no fixed schedule for updates. New features or versions (like the upcoming V4.1) will be released as time and studies permit.
-* **Expectations:** While I am passionate about this project, please understand that responses to issues or pull requests may be delayed.
-
-*This project is a journey of learning and experimentation, not a commercial product.*
 
 ## 📈 Monetization & Support
 This project is Open Source. If you want to support development:
