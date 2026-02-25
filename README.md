@@ -25,6 +25,7 @@ The bot is designed to be flexible and safe for beginners:
    ```bash
    docker build -t shieldtrade-bot .
    docker run -d --name trading-bot shieldtrade-bot```
+
 ## 🚀 Key Features
 * **Dynamic Trailing Take Profit (V4.0):** Tracks market momentum to capture maximum gains beyond the initial 1.5% target.
 * **Shielded Execution:** Logic-gate architecture that prevents internal state updates if API orders fail.
