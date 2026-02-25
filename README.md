@@ -51,5 +51,5 @@ The system consists of two main components:
 
 ## 📈 Monetization & Support
 This project is Open Source. If you want to support development:
-* Register on Binance using our **[Referral Link]**.
+* Register on Binance using our **[Referral Link](https://www.binance.com/activity/referral-entry/CPA?ref=CPA_000RJSUT5M)**.
 * Buy me a coffee via **[Donation Link]**.
