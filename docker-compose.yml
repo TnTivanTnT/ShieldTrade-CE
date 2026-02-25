@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  shieldtrade-bot:
+    build: .
+    container_name: shieldtrade_v4_boss
+    restart: always
+    volumes:
+      - ./bot_state.json:/app/bot_state.json
+      - ./trading_history.csv:/app/trading_history.csv
+      - ./logs:/app/logs
