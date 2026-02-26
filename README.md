@@ -14,8 +14,9 @@ The bot is designed to be flexible and safe for beginners:
 * **Real-time Notifications:** Uses Telegram Bot API to send instant alerts for every buy, sell, and trailing update.
 
 ## ⚠️ Current Status: Testing Phase
-**Important:** As of February 25, 2026, this bot is in a **Simulation-Only Testing Phase**. 
-* The Trailing Take Profit (TTP) and DCA logic have been rigorously tested with virtual data. 
+**Important:** As of February 26, 2026, this bot is in a **Simulation-Only Testing Phase**. 
+* The current active development focuses on implementing High Time Frame (HTF) Trend Filters (EMA 200) to prevent the bot from buying during strong market downtrends.
+* The Trailing Take Profit (TTP) and DCA logic are implemented but remain in standby/testing until the entry filters are fully validated with virtual data. 
 * While the Binance API integration for live trading is implemented, it has not yet been deployed with real capital. Use at your own risk.
 
 ## 🛠️ Setup Instructions
@@ -26,8 +27,8 @@ The bot is designed to be flexible and safe for beginners:
    docker build -t shieldtrade-bot .
    docker run -d --name trading-bot shieldtrade-bot
    ```
-
 ## 🚀 Key Features
+* **HTF Trend Filtering (V4.1 WIP):** Utilizes EMA 200 on higher timeframes to block entries during macro downtrends (prevents "falling knife" scenarios).
 * **Dynamic Trailing Take Profit (V4.0):** Tracks market momentum to capture maximum gains beyond the initial 1.5% target.
 * **Shielded Execution:** Logic-gate architecture that prevents internal state updates if API orders fail.
 * **Non-Custodial & Secure:** API keys are stored locally. No external servers ever touch your credentials.
@@ -44,11 +45,15 @@ The system consists of two main components:
 * **Safety Net:** Built-in balance checks before any trade execution.
 * **Withdrawal Protection:** Users are encouraged to disable "Withdrawal" permissions on their API keys.
 
-## 🗺️ Roadmap
-- [x] **V3.3:** Shielded logic and rotative logs.
-- [ ] **V4.0:** Implementation of the Trailing Take Profit engine (Testing Phase).
-- [ ] **V4.1:** Integration with FastAPI for remote monitoring.
-- [ ] **V5.0:** Mobile App release and Cloudflare Tunnel support.
+## 🗺️ Roadmap ShieldTrade-CE
+- 🟢 **V3.3:** Shielded logic and rotative logs.
+- 🟢 **V4.0:** Implementation of the Trailing Take Profit engine (TTP).
+- 🟠 **V4.1:** HTF Trend Filter (EMA 200 1H) to avoid "falling knives" in bear markets.
+- ⚪ **V4.2:** Data Integrity Milestone: Atomic JSON storage and Auto-Reconciliation with Binance API at startup.
+- ⚪ **V4.2.1:** Production Milestone: First deployment with real capital (50€ Test).
+- ⚪ **V4.3:** TTP Optimization: Calibration of dynamic trailing gaps to maximize "centimitos".
+- ⚪ **V4.4:** Backend Core: Integration with FastAPI for local/remote headless monitoring.
+- ⚪ **V5.0:** User Experience: Mobile App (Flet/Flutter) and secure Cloudflare Tunneling.
 
 ## 🎓 Maintenance & Development Status
 **ShieldTrade-CE** is a personal learning project and a hobby.

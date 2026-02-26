@@ -7,222 +7,380 @@ import json
 import os
 import csv
 import glob
+import gc
 from datetime import datetime, timedelta
 
-# --- USER CONFIGURATION ---
-SIMULATION = True
-PAIRS = ['SOL/EUR', 'ETH/EUR']
-TOTAL_BUDGET = 50.0
-SLOT_SIZE = 10.5
-MAX_SLOTS = int(TOTAL_BUDGET // SLOT_SIZE)
+# --- CONFIGURACIÓN DE USUARIO ---
+SIMULACION = True
+PARES = ['SOL/EUR', 'ETH/EUR']
+PRESUPUESTO_TOTAL = 50.0
+TAMANO_SLOT = 10.5
+MAX_SLOTS = int(PRESUPUESTO_TOTAL // TAMANO_SLOT)
 
-# Strategy: DCA + Filter + Trailing Take Profit
-RSI_ENTRY_MAX = 45
-DCA_REPURCHASE_DROP = 0.03
-PROFIT_MARGIN = 0.015
-TRAILING_GAP = 0.003       # 0.3% drop from peak to trigger sell
-BINANCE_FEE = 0.001        # 0.1% Spot Fee
-LOG_RETENTION_DAYS = 15
+# Estrategia DCA + FILTRO RSI + TRAILING
+RSI_MAX_ENTRADA = 45
+CAIDA_PARA_RECOMPRA = 0.03
+MARGEN_GANANCIA = 0.015
+TRAILING_GAP = 0.003
+COMISION_BINANCE = 0.001
+DIAS_RETENCION_LOGS = 15
 
-# --- CREDENTIALS ---
-TELEGRAM_TOKEN = "YOUR_TOKEN_HERE"
-TELEGRAM_CHAT_ID = "YOUR_ID_HERE"
-API_KEY = ''
-SECRET_KEY = ''
+# V4.1: Filtro Macro
+EMA_MACRO_PERIOD = 200
+EMA_MACRO_TIMEFRAME = '1h'
 
-# --- PATHS ---
-CSV_FILE = "/app/trading_history.csv"
-STATE_FILE = "/app/bot_state.json"
-LOGS_FOLDER = "/app/logs"
+# --- CREDENCIALES ---
+TELEGRAM_TOKEN = ""
+TELEGRAM_CHAT_ID = ""
+API_KEY = ''               
+SECRET_KEY = ''  
 
-# --- INITIALIZATION ---
+# --- RUTAS ---
+ARCHIVO_CSV = "/app/historial_trading.csv"
+ARCHIVO_ESTADO = "/app/estado_bot.json"
+CARPETA_LOGS = "/app/logs"
+
+# --- INICIALIZACIÓN ---
 exchange = ccxt.binance({'enableRateLimit': True})
-if not SIMULATION:
+if not SIMULACION:
     exchange.apiKey = API_KEY
     exchange.secret = SECRET_KEY
 
-def write_daily_log(message):
+def log_diario(mensaje):
     try:
-        os.makedirs(LOGS_FOLDER, exist_ok=True)
-        file_name = f"{LOGS_FOLDER}/log_{datetime.now().strftime('%Y-%m-%d')}.txt"
-        with open(file_name, "a", encoding="utf-8") as f:
-            f.write(f"{message}\n")
+        os.makedirs(CARPETA_LOGS, exist_ok=True)
+        nombre_archivo = f"{CARPETA_LOGS}/log_{datetime.now().strftime('%Y-%m-%d')}.txt"
+        with open(nombre_archivo, "a", encoding="utf-8") as f:
+            f.write(f"{mensaje}\n")
             
-        # Log rotation: clean old files
-        retention_limit = datetime.now() - timedelta(days=LOG_RETENTION_DAYS)
-        log_files = glob.glob(f"{LOGS_FOLDER}/log_*.txt")
-        for file in log_files:
-            date_str = file.split('_')[-1].replace('.txt', '')
+        limite_fecha = datetime.now() - timedelta(days=DIAS_RETENCION_LOGS)
+        archivos_log = glob.glob(f"{CARPETA_LOGS}/log_*.txt")
+        for archivo in archivos_log:
+            fecha_str = archivo.split('_')[-1].replace('.txt', '')
             try:
-                file_date = datetime.strptime(date_str, '%Y-%m-%d')
-                if file_date < retention_limit:
-                    os.remove(file)
+                fecha_archivo = datetime.strptime(fecha_str, '%Y-%m-%d')
+                if fecha_archivo < limite_fecha:
+                    os.remove(archivo)
             except: pass
     except Exception as e: 
-        print(f"[ERROR] Logging system failed: {e}")
+        print(f"[ERROR] Sistema de logs falló: {e}")
 
 try:
     exchange.load_markets()
 except Exception as e:
-    msg = f"[ERROR] Notice: Could not load markets initially: {e}"
+    msg = f"[ERROR] Aviso: No se pudieron cargar los mercados inicialmente: {e}"
     print(msg)
-    write_daily_log(msg)
+    log_diario(msg)
 
-price_cache = {pair: 0.0 for pair in PAIRS}
+precios_cache = {par: 0.0 for par in PARES}
 
-# --- STATE MANAGER ---
-class StateManager:
+# --- GESTOR DE MEMORIA ---
+class GestorEstado:
     def __init__(self):
-        self.data = {
-            "initial_balance": TOTAL_BUDGET,
-            "yesterday_balance": TOTAL_BUDGET,
-            "last_report_date": "",
-            "total_realized_profit": 0.0,
-            "portfolio": {pair: {"amount": 0.0, "avg_price": 0.0, "invested": 0.0, "max_price_reached": 0.0} for pair in PAIRS}
+        self.datos = {
+            "balance_inicial": PRESUPUESTO_TOTAL,
+            "balance_ayer": PRESUPUESTO_TOTAL,
+            "fecha_ultimo_reporte": "",
+            "beneficio_realizado_acumulado": 0.0,
+            "cartera": {par: {"cantidad": 0.0, "precio_medio": 0.0, "invertido": 0.0, "precio_maximo_alcanzado": 0.0} for par in PARES}
         }
-        self.load()
+        self.cargar()
 
-    def load(self):
-        if os.path.exists(STATE_FILE):
+    def cargar(self):
+        if os.path.exists(ARCHIVO_ESTADO):
             try:
-                with open(STATE_FILE, 'r') as f:
-                    loaded_data = json.load(f)
-                    for k, v in loaded_data.items():
-                        if k == "portfolio":
-                            for pair, info in v.items():
-                                if "max_price_reached" not in info:
-                                    info["max_price_reached"] = 0.0
-                        self.data[k] = v
-                    if "total_realized_profit" not in self.data:
-                        self.data["total_realized_profit"] = 0.0
+                with open(ARCHIVO_ESTADO, 'r') as f:
+                    data_cargada = json.load(f)
+                    for k, v in data_cargada.items():
+                        if k == "cartera":
+                            for par, info in v.items():
+                                if "precio_maximo_alcanzado" not in info:
+                                    info["precio_maximo_alcanzado"] = 0.0
+                        self.datos[k] = v
+                    if "beneficio_realizado_acumulado" not in self.datos:
+                        self.datos["beneficio_realizado_acumulado"] = 0.0
             except:
-                msg = "[ERROR] JSON Error, starting from scratch."
+                msg = "[ERROR] Error JSON, iniciando de cero."
                 print(msg)
-                write_daily_log(msg)
+                log_diario(msg)
 
-    def save(self):
+    def guardar(self):
         try:
-            with open(STATE_FILE, 'w') as f:
-                json.dump(self.data, f, indent=4)
+            with open(ARCHIVO_ESTADO, 'w') as f:
+                json.dump(self.datos, f, indent=4)
         except Exception as e:
-            msg = f"[ERROR] JSON SAVE ERROR: {e}"
+            msg = f"[ERROR] ERROR JSON al guardar: {e}"
             print(msg)
-            write_daily_log(msg)
+            log_diario(msg)
 
-    def get_used_slots(self):
-        total_invested = sum(d['invested'] for d in self.data['portfolio'].values())
-        return int(total_invested // SLOT_SIZE)
+    def get_slots_usados(self):
+        total_invertido = sum(d['invertido'] for d in self.datos['cartera'].values())
+        return int(total_invertido // TAMANO_SLOT)
 
-state = StateManager()
+estado = GestorEstado()
 
-# --- UTILITIES ---
-def send_telegram_msg(message):
+# --- FUNCIONES DE MERCADO ---
+def enviar_telegram(mensaje):
     try:
         requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
-                      data={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"})
+                      data={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"})
     except: pass
 
-def calculate_total_equity():
-    free_cash = (TOTAL_BUDGET + state.data['total_realized_profit']) - sum(d['invested'] for d in state.data['portfolio'].values())
-    coin_value = sum(info['amount'] * price_cache.get(pair, 0.0) for pair, info in state.data['portfolio'].items() if info['amount'] > 0)
-    return free_cash + coin_value
+def calcular_patrimonio_total():
+    dinero_libre = (PRESUPUESTO_TOTAL + estado.datos['beneficio_realizado_acumulado']) - sum(d['invertido'] for d in estado.datos['cartera'].values())
+    valor_monedas = sum(info['cantidad'] * precios_cache.get(par, 0.0) for par, info in estado.datos['cartera'].items() if info['cantidad'] > 0)
+    return dinero_libre + valor_monedas
 
-def save_to_history(action, pair, price, amount, total, max_price_trade=0.0):
+def guardar_historial(accion, par, precio, cantidad, total, precio_max_trade=0.0):
     try:
-        exists = os.path.exists(CSV_FILE)
-        with open(CSV_FILE, 'a', newline='') as f:
+        existe = os.path.exists(ARCHIVO_CSV)
+        with open(ARCHIVO_CSV, 'a', newline='') as f:
             writer = csv.writer(f)
-            if not exists:
-                writer.writerow(["Date", "Pair", "Action", "Price", "Amount", "Total_EUR", "Realized_Balance", "Max_Price_In_Trade"])
+            if not existe:
+                writer.writerow(["Fecha", "Par", "Accion", "Precio", "Cantidad", "Total_EUR", "Balance_Realizado", "Precio_Maximo_Trade"])
             
-            current_realized = TOTAL_BUDGET + state.data['total_realized_profit']
+            balance_realizado_actual = PRESUPUESTO_TOTAL + estado.datos['beneficio_realizado_acumulado']
             writer.writerow([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                pair, action, price, amount, total, current_realized, max_price_trade
+                par, accion, precio, cantidad, total, balance_realizado_actual, precio_max_trade
             ])
     except Exception as e:
-        write_daily_log(f"[ERROR] CSV Error: {e}")
+        log_diario(f"[ERROR] Error CSV: {e}")
 
-def fetch_market_data(pair):
+def obtener_datos_mercado(par):
     try:
-        ohlcv = exchange.fetch_ohlcv(pair, timeframe='5m', limit=100)
+        ohlcv = exchange.fetch_ohlcv(par, timeframe='5m', limit=100)
         df = pd.DataFrame(ohlcv, columns=['time', 'open', 'high', 'low', 'close', 'vol'])
         rsi = df.ta.rsi(length=14).iloc[-1]
-        current_price = df['close'].iloc[-1]
-        previous_price = df['close'].iloc[-2]
+        precio_actual = df['close'].iloc[-1]
+        precio_anterior = df['close'].iloc[-2]
         
-        price_cache[pair] = current_price
-        return current_price, rsi, previous_price
+        precios_cache[par] = precio_actual
+        return precio_actual, rsi, precio_anterior
         
-    except ccxt.NetworkError:
-        write_daily_log(f"[ERROR] Binance Network Error ({pair}): Skipping cycle...")
+    except ccxt.NetworkError as e:
+        log_diario(f"[ERROR] Error de red Binance ({par}): Ignorando ciclo...")
         return 0, 100, 999999
-    except ccxt.ExchangeError:
-        write_daily_log(f"[ERROR] Binance Internal Error ({pair}): Skipping cycle...")
+    except ccxt.ExchangeError as e:
+        log_diario(f"[ERROR] Error interno Binance ({par}): Ignorando ciclo...")
         return 0, 100, 999999
     except Exception as e:
-        write_daily_log(f"[ERROR] Critical Error fetching data ({pair}): {e}")
+        log_diario(f"[ERROR] Error crítico obteniendo datos ({par}): {e}")
         return 0, 100, 999999
 
-# --- MAIN LOOP ---
-start_msg = "[INFO] 🤖 BOT V4.0: The Final Boss (Dynamic TTP)"
-print(start_msg)
-write_daily_log(start_msg)
-send_telegram_msg("🚀 **Bot V4.0 Started**\nMode: Ready for Production 🛡️\nEngine: Dynamic Trailing Take Profit Active 📈")
+def verificar_tendencia_macro(par):
+    """ V4.1: Calcula la EMA 200 en 1H para confirmar tendencia alcista global """
+    try:
+        # Límite a 250 para asegurar que la EMA 200 tiene suficientes datos previos
+        ohlcv = exchange.fetch_ohlcv(par, timeframe=EMA_MACRO_TIMEFRAME, limit=250)
+        df = pd.DataFrame(ohlcv, columns=['time', 'open', 'high', 'low', 'close', 'vol'])
+        ema_200 = df.ta.ema(length=EMA_MACRO_PERIOD).iloc[-1]
+        
+        # Limpieza agresiva de memoria para el i7 1ª Gen
+        del df
+        del ohlcv
+        gc.collect()
+        
+        return ema_200
+    except Exception as e:
+        log_diario(f"[ERROR] Fallo al calcular EMA 200 Macro para {par}: {e}")
+        # En caso de error de red, devolvemos un número altísimo para bloquear compras por seguridad
+        return float('inf')
+
+# --- BUCLE PRINCIPAL ---
+msg_inicio = "[INFO] 🤖 BOT V4.1: Protector (TTP + EMA200 1H)"
+print(msg_inicio)
+log_diario(msg_inicio)
+enviar_telegram("🚀 **Bot V4.1 Iniciado**\nModo: Preparado para Producción 🛡️\nMotor: Trailing Take Profit\nFiltro: Tendencia Macro (EMA200)")
 
 while True:
     try:
-        now = datetime.now()
-        slots_occupied = state.get_used_slots()
+        ahora = datetime.now()
+        slots_ocupados = estado.get_slots_usados()
         
-        # Daily Report at 10:00 AM
-        if now.hour == 10 and now.minute == 0 and state.data['last_report_date'] != now.strftime("%Y-%m-%d"):
-            for pair in PARES:
-                fetch_market_data(pair)
+        if ahora.hour == 10 and ahora.minute == 0 and estado.datos['fecha_ultimo_reporte'] != ahora.strftime("%Y-%m-%d"):
+            for par in PARES:
+                obtener_datos_mercado(par)
             
-            equity = calculate_total_equity()
-            start_bal = state.data['initial_balance']
-            yesterday_bal = state.data['yesterday_balance']
+            patrimonio = calcular_patrimonio_total()
+            balance_ini = estado.datos['balance_inicial']
+            balance_ayer = estado.datos['balance_ayer']
             
-            daily_pnl = equity - yesterday_bal
-            total_pnl = equity - start_bal
+            b_diario = patrimonio - balance_ayer
+            b_historico = patrimonio - balance_ini
             
-            report_msg = (
-                f"📅 **Daily Summary**\n"
-                f"Initial Funds: {start_bal:.2f}€\n"
-                f"Current (Floating): {equity:.2f}€\n"
-                f"Realized Profit: {'+' if state.data['total_realized_profit']>0 else ''}{state.data['total_realized_profit']:.2f}€\n"
-                f"Daily PnL: {'+' if daily_pnl>0 else ''}{daily_pnl:.2f}€\n"
-                f"Lifetime PnL: {'+' if total_pnl>0 else ''}{total_pnl:.2f}€"
+            msg_resumen = (
+                f"📅 **Resumen Diario**\n"
+                f"Dinero inicial: {balance_ini:.2f}€\n"
+                f"Actual (Flotante): {patrimonio:.2f}€\n"
+                f"Beneficio Realizado: {'+' if estado.datos['beneficio_realizado_acumulado']>0 else ''}{estado.datos['beneficio_realizado_acumulado']:.2f}€\n"
+                f"Balance diario: {'+' if b_diario>0 else ''}{b_diario:.2f}€\n"
+                f"Balance histórico: {'+' if b_historico>0 else ''}{b_historico:.2f}€"
             )
-            send_telegram_msg(report_msg)
+            enviar_telegram(msg_resumen)
             
-            state.data['last_report_date'] = now.strftime("%Y-%m-%d")
-            state.data['yesterday_balance'] = equity
-            state.save()
+            estado.datos['fecha_ultimo_reporte'] = ahora.strftime("%Y-%m-%d")
+            estado.datos['balance_ayer'] = patrimonio
+            estado.guardar()
 
-        log_line = f"[INFO] [{now.strftime('%H:%M')}] "
-        extra_logs = []
+        log_linea = f"[INFO] [{ahora.strftime('%H:%M')}] "
+        logs_adicionales = []
 
-        for pair in PARES:
-            price, rsi, prev_price = fetch_market_data(pair)
-            if price == 0: continue
+        for par in PARES:
+            precio, rsi, precio_ant = obtener_datos_mercado(par)
+            if precio == 0: continue
             
-            position = state.data['portfolio'][pair]
-            bullish = price > prev_price
-            trend_icon = "↗️" if bullish else "↘️"
+            posicion = estado.datos['cartera'][par]
+            tendencia_alcista = precio > precio_ant
+            icono_tendencia = "↗️" if tendencia_alcista else "↘️"
             
-            log_line += f"{pair.split('/')[0]}:{price:.1f}€({rsi:.0f}){trend_icon} | "
+            log_linea += f"{par.split('/')[0]}:{precio:.1f}€({rsi:.0f}){icono_tendencia} | "
 
-            # Update position peak price
-            if position['amount'] > 0:
-                if price > position['max_price_reached']:
-                    position['max_price_reached'] = price
-                    state.save()
+            if posicion['cantidad'] > 0:
+                if precio > posicion['precio_maximo_alcanzado']:
+                    posicion['precio_maximo_alcanzado'] = precio
+                    estado.guardar()
 
-            # --- TTP SELL LOGIC (SHIELDED) ---
-            if position['amount'] > 0:
-                min_target = position['avg_price'] * (1 + PROFIT_MARGIN)
-                peak_price = position['max_price_reached']
+            # --- VENTA TTP (SHIELDED - Sin Filtro Macro) ---
+            if posicion['cantidad'] > 0:
+                objetivo_minimo = posicion['precio_medio'] * (1 + MARGEN_GANANCIA)
+                maximo_logrado = posicion['precio_maximo_alcanzado']
                 
-                # Check if
+                if maximo_logrado >= objetivo_minimo:
+                    gatillo_venta = maximo_logrado * (1 - TRAILING_GAP)
+                    
+                    if precio <= gatillo_venta:
+                        cantidad_a_vender = posicion['cantidad']
+                        orden_completada = True
+                        
+                        if not SIMULACION:
+                            try:
+                                moneda_base = par.split('/')[0]
+                                balance_real = exchange.fetch_balance()
+                                cantidad_real = balance_real[moneda_base]['free']
+                                
+                                cantidad_a_vender = min(cantidad_a_vender, cantidad_real)
+                                cantidad_a_vender = float(exchange.amount_to_precision(par, cantidad_a_vender))
+                                
+                                exchange.create_market_sell_order(par, cantidad_a_vender)
+                                logs_adicionales.append(f"[TRADE] ✅ ORDEN EJECUTADA: VENTA {cantidad_a_vender} {par}")
+                                
+                            except ccxt.InsufficientFunds as e:
+                                logs_adicionales.append(f"[ERROR] FONDOS: Intentado vender {par} pero no hay saldo. {e}")
+                                enviar_telegram(f"⚠️ **ALERTA BINANCE**\nFallo al vender {par} (Fondos insuficientes o polvo).")
+                                orden_completada = False
+                            except Exception as e:
+                                logs_adicionales.append(f"[ERROR] API VENTA {par}: {e}")
+                                orden_completada = False
+
+                        if orden_completada:
+                            total_bruto = cantidad_a_vender * precio
+                            total_neto = total_bruto * (1 - COMISION_BINANCE) 
+                            beneficio_neto = total_neto - posicion['invertido']
+                            
+                            telegram_msg = (
+                                f"🟢 **VENTA TTP {par}**\n"
+                                f"Bruto: {total_bruto:.2f}€\n"
+                                f"Neto: {total_neto:.2f}€\n"
+                                f"Ganancia Limpia: {beneficio_neto:.4f}€\n"
+                                f"📈 Máx. Alcanzado: {maximo_logrado:.2f}€\n"
+                                f"🎯 Gatillo Ejecutado: {gatillo_venta:.2f}€"
+                            )
+                            enviar_telegram(telegram_msg)
+                            logs_adicionales.append(f"[TRADE] VENTA completada en {par} a {precio}€.")
+                            
+                            estado.datos['beneficio_realizado_acumulado'] += beneficio_neto
+                            guardar_historial("VENTA_TTP", par, precio, cantidad_a_vender, total_neto, maximo_logrado)
+                            
+                            posicion['cantidad'] = 0.0
+                            posicion['invertido'] = 0.0
+                            posicion['precio_medio'] = 0.0
+                            posicion['precio_maximo_alcanzado'] = 0.0
+                            estado.guardar()
+                            continue 
+                    else:
+                        logs_adicionales.append(f"[TRAILING] {par} en zona de profit. Máximo: {maximo_logrado:.2f}€. Gatillo en: {gatillo_venta:.2f}€")
+
+            # --- COMPRA (SHIELDED - CON FILTRO MACRO) ---
+            if slots_ocupados < MAX_SLOTS:
+                condicion_entrada_rsi = rsi < RSI_MAX_ENTRADA and tendencia_alcista
+                condicion_dca = False
+                
+                if posicion['cantidad'] > 0:
+                    precio_dca = posicion['precio_medio'] * (1 - CAIDA_PARA_RECOMPRA)
+                    if precio < precio_dca and tendencia_alcista:
+                        condicion_dca = True
+
+                # Si el RSI o el DCA piden entrar, verificamos al "Jefe Final" (EMA 200)
+                if (posicion['cantidad'] == 0 and condicion_entrada_rsi) or condicion_dca:
+                    ema_200_actual = verificar_tendencia_macro(par)
+                    
+                    if precio > ema_200_actual:
+                        # Vía libre para comprar
+                        comprar = True
+                        tipo = "INICIAL" if posicion['cantidad'] == 0 else "DCA"
+                        
+                        cantidad_bruta = TAMANO_SLOT / precio
+                        cantidad_neta = cantidad_bruta * (1 - COMISION_BINANCE)
+                        
+                        try:
+                            cantidad_redondeada = float(exchange.amount_to_precision(par, cantidad_neta))
+                        except:
+                            cantidad_redondeada = cantidad_neta 
+                        
+                        orden_completada = True
+                        
+                        if not SIMULACION:
+                            try:
+                                balance_real = exchange.fetch_balance()
+                                euros_libres = balance_real['EUR']['free']
+                                
+                                if euros_libres < TAMANO_SLOT:
+                                    logs_adicionales.append(f"[ERROR] SALDO EUR INSUFICIENTE. Tienes {euros_libres}€, necesitas {TAMANO_SLOT}€.")
+                                    enviar_telegram(f"🛑 **ALERTA LIQUIDEZ**\nIntento de compra de {par} fallido.\nSaldo disponible: {euros_libres:.2f}€.")
+                                    orden_completada = False
+                                else:
+                                    exchange.create_market_buy_order(par, cantidad_redondeada)
+                                    logs_adicionales.append(f"[TRADE] ✅ ORDEN EJECUTADA: COMPRA {cantidad_redondeada} {par}")
+                                    
+                            except ccxt.InsufficientFunds as e:
+                                logs_adicionales.append(f"[ERROR] FONDOS: API Binance rechazó la compra de {par}. {e}")
+                                orden_completada = False
+                            except Exception as e:
+                                logs_adicionales.append(f"[ERROR] API COMPRA {par}: {e}")
+                                orden_completada = False
+
+                        if orden_completada:
+                            nuevo_inv = posicion['invertido'] + TAMANO_SLOT
+                            nuevo_cant = posicion['cantidad'] + cantidad_redondeada
+                            nuevo_pm = nuevo_inv / nuevo_cant
+                            
+                            enviar_telegram(f"🔵 **COMPRA {tipo} {par}**\nPrecio: {precio}€\nRecibido Neto: {cantidad_redondeada}\nRSI: {rsi:.1f} ↗️")
+                            guardar_historial("COMPRA", par, precio, cantidad_redondeada, TAMANO_SLOT, 0.0)
+                            logs_adicionales.append(f"[TRADE] COMPRA completada en {par} a {precio}€.")
+                            
+                            posicion['cantidad'] = nuevo_cant
+                            posicion['invertido'] = nuevo_inv
+                            posicion['precio_medio'] = nuevo_pm
+                            posicion['precio_maximo_alcanzado'] = precio
+                            estado.guardar()
+                            slots_ocupados += 1
+                            
+                    else:
+                        # Bloqueo de la EMA 200
+                        logs_adicionales.append(f"[INFO] [{par}] Señal RSI/DCA detectada, pero bloqueada por Tendencia Macro Bajista (EMA 200 1H: {ema_200_actual:.2f}€).")
+
+        print(log_linea)
+        log_diario(log_linea)
+        for msg in logs_adicionales:
+            print(msg)
+            log_diario(msg)
+            
+        time.sleep(60)
+
+    except Exception as e:
+        msg_err = f"[ERROR] Bucle General: {e}"
+        print(msg_err)
+        log_diario(msg_err)
+        time.sleep(10)
+
