@@ -13,11 +13,11 @@ The bot is designed to be flexible and safe for beginners:
     * `False`: Connects to Binance API for live trading.
 * **Real-time Notifications:** Uses Telegram Bot API to send instant alerts for every buy, sell, and trailing update.
 
-## 🟠 Current Status: Testing Phase
-**Important:** As of February 27, 2026, the bot is running in **Simulation-Only Mode**.
-* The current active development (V4.2) focuses on a complete English codebase refactoring and implementing Data Integrity mechanisms (Auto-Reconciliation with Binance API at startup).
-* Core features like HTF Trend Filtering (EMA 200), Trailing Take Profit (TTP), and DCA are implemented and undergoing virtual validation.
-* While the Binance API integration is active, it has not yet been deployed with real capital. Use at your own risk.
+## 🟠 Current Status
+**Important:** As of March 1, 2026, the bot is running in a **Controlled Live Environment**.
+* The current active deployment (V4.2.1) represents the first production milestone using real capital (50€ test budget).
+* Core data integrity mechanisms (Auto-Reconciliation) and HTF Trend Filters (EMA 200) are actively protecting this initial capital.
+* **Caution:** While running live, this remains an experimental version. Monitoring is strict to validate the Trailing Take Profit (TTP) and DCA logic under real market conditions.
 
 ## 🛠️  Setup Instructions
 1. **Telegram Setup:** Create a bot via [@BotFather](https://t.me/botfather) and retrieve your `TELEGRAM_TOKEN` and `CHAT_ID`.
@@ -61,7 +61,7 @@ The system consists of two main components:
 **ShieldTrade-CE** is a personal learning project and a hobby.
 
 * **Academic Priority:** The lead developer is a university student. Academic responsibilities are the top priority, so development happens exclusively during free time.
-* **Release Cycle:** There is no fixed schedule for updates. New features or versions (like the upcoming V4.1) will be released as time and studies permit.
+* **Release Cycle:** There is no fixed schedule for updates. New features or versions will be released as time and studies permit.
 * **Expectations:** While I am passionate about this project, please understand that responses to issues or pull requests may be delayed.
 
 *This project is a journey of learning and experimentation, not a commercial product.*
