@@ -11,10 +11,10 @@ import gc
 from datetime import datetime, timedelta
 
 # --- USER CONFIGURATION ---
-SIMULATION = True
-PAIRS = ['SOL/EUR', 'ETH/EUR']
-TOTAL_BUDGET = 50.0
-SLOT_SIZE = 10.5
+SIMULATION = False
+PAIRS = ['SOL/USDC', 'ETH/USDC']
+TOTAL_BUDGET = 58.44
+SLOT_SIZE = 14.5
 MAX_SLOTS = int(TOTAL_BUDGET // SLOT_SIZE)
 
 # Strategy: DCA + RSI + MACRO + TTP
@@ -22,7 +22,7 @@ MAX_RSI_ENTRY = 45
 DCA_DROP_PERCENT = 0.03
 PROFIT_MARGIN = 0.015
 TRAILING_GAP = 0.003
-BINANCE_FEE = 0.001
+BINANCE_FEE = 0.001 # 0.1% for Market Taker orders
 LOG_RETENTION_DAYS = 15
 
 # Macro Filter
@@ -33,10 +33,10 @@ EMA_MACRO_TIMEFRAME = '1h'
 TELEGRAM_TOKEN = "PEGA_AQUI_TU_TOKEN"
 TELEGRAM_CHAT_ID = "PEGA_AQUI_TU_ID"
 API_KEY = ''
-SECRET_KEY = ''
+SECRET_KEY = '' 
 
 # --- PATHS ---
-CSV_FILE = "/app/trading_history.csv"
+CSV_FILE = "/app/trading_history_usdc.csv" # Nuevo archivo para no mezclar EUR con USDC
 STATE_FILE = "/app/bot_state.json"
 LOGS_FOLDER = "/app/logs"
 
@@ -88,7 +88,6 @@ class StateManager:
         self.reconcile_balances()
 
     def load(self):
-        # Migración automática si aún existe el archivo viejo
         old_file = "/app/estado_bot.json"
         target_file = STATE_FILE if os.path.exists(STATE_FILE) else (old_file if os.path.exists(old_file) else None)
 
@@ -97,20 +96,21 @@ class StateManager:
                 with open(target_file, 'r') as f:
                     loaded_data = json.load(f)
                     
-                    # Mapeo de variables viejas a nuevas (Traducción de estado)
-                    self.data["initial_balance"] = loaded_data.get("balance_inicial", TOTAL_BUDGET)
-                    self.data["yesterday_balance"] = loaded_data.get("balance_ayer", TOTAL_BUDGET)
-                    self.data["last_report_date"] = loaded_data.get("fecha_ultimo_reporte", "")
-                    self.data["realized_profit"] = loaded_data.get("beneficio_realizado_acumulado", 0.0)
+                    # Detectar si estamos migrando de EUR a USDC
+                    old_pairs = list(loaded_data.get("portfolio", loaded_data.get("cartera", {})).keys())
+                    if old_pairs and "USDC" not in old_pairs[0]:
+                        msg = "[INFO] Detectado cambio de EUR a USDC. Reseteando memoria JSON para empezar limpio."
+                        print(msg)
+                        log_daily(msg)
+                        self.save() # Guarda el estado base limpio en USDC
+                        return
+
+                    self.data["initial_balance"] = loaded_data.get("initial_balance", TOTAL_BUDGET)
+                    self.data["yesterday_balance"] = loaded_data.get("yesterday_balance", TOTAL_BUDGET)
+                    self.data["last_report_date"] = loaded_data.get("last_report_date", "")
+                    self.data["realized_profit"] = loaded_data.get("realized_profit", 0.0)
                     
-                    if "cartera" in loaded_data:
-                        for pair, info in loaded_data["cartera"].items():
-                            if pair in self.data["portfolio"]:
-                                self.data["portfolio"][pair]["amount"] = info.get("cantidad", 0.0)
-                                self.data["portfolio"][pair]["avg_price"] = info.get("precio_medio", 0.0)
-                                self.data["portfolio"][pair]["invested"] = info.get("invertido", 0.0)
-                                self.data["portfolio"][pair]["max_price_reached"] = info.get("precio_maximo_alcanzado", 0.0)
-                    elif "portfolio" in loaded_data:
+                    if "portfolio" in loaded_data:
                         for pair, info in loaded_data["portfolio"].items():
                             if pair in self.data["portfolio"]:
                                 self.data["portfolio"][pair]["amount"] = info.get("amount", 0.0)
@@ -123,7 +123,6 @@ class StateManager:
                 log_daily(msg)
 
     def save(self):
-        """ Atomic write to prevent corruption on sudden shutdowns """
         tmp_file = f"{STATE_FILE}.tmp"
         try:
             with open(tmp_file, 'w') as f:
@@ -135,7 +134,6 @@ class StateManager:
             log_daily(msg)
 
     def reconcile_balances(self):
-        """ V4.2 Safe Auto-Reconciliation """
         if SIMULATION: return
         try:
             real_balances = exchange.fetch_balance()
@@ -183,7 +181,7 @@ def save_history(action, pair, price, amount, total, max_trade_price=0.0):
         with open(CSV_FILE, 'a', newline='') as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow(["Date", "Pair", "Action", "Price", "Amount", "Total_EUR", "Realized_Balance", "Max_Trade_Price"])
+                writer.writerow(["Date", "Pair", "Action", "Price", "Amount", "Total_USDC", "Realized_Balance", "Max_Trade_Price"])
             
             current_realized = TOTAL_BUDGET + state.data['realized_profit']
             writer.writerow([
@@ -230,10 +228,10 @@ def verify_macro_trend(pair):
         return float('inf')
 
 # --- MAIN LOOP ---
-start_msg = "[INFO] 🤖 BOT V4.2: Resilience Milestone (English Refactor & Atomic JSON)"
+start_msg = "[INFO] 🤖 BOT V4.2.1: USDC Migration & Atomic Write"
 print(start_msg)
 log_daily(start_msg)
-send_telegram("🚀 **Bot V4.2 Iniciado**\nModo: Resilience Milestone 🛡️\nMotor: TTP Dinámico + EMA200 1H")
+send_telegram("🚀 **Bot V4.2.1 Iniciado**\nModo: Simulación USDC 🛡️\nMotor: TTP Dinámico + EMA200 1H")
 
 while True:
     try:
@@ -241,7 +239,6 @@ while True:
         used_slots = state.get_used_slots()
         today_str = now.strftime("%Y-%m-%d")
         
-        # Robust Daily Report (>= 10)
         if now.hour >= 10 and state.data['last_report_date'] != today_str:
             for pair in PAIRS:
                 get_market_data(pair)
@@ -255,11 +252,11 @@ while True:
             
             resumen_msg = (
                 f"📅 **Resumen Diario**\n"
-                f"Dinero inicial: {init_bal:.2f}€\n"
-                f"Actual (Flotante): {equity:.2f}€\n"
-                f"Beneficio Realizado: {'+' if state.data['realized_profit']>0 else ''}{state.data['realized_profit']:.2f}€\n"
-                f"Balance diario: {'+' if daily_diff>0 else ''}{daily_diff:.2f}€\n"
-                f"Balance histórico: {'+' if hist_diff>0 else ''}{hist_diff:.2f}€"
+                f"Fondo inicial: {init_bal:.2f}$\n"
+                f"Actual (Flotante): {equity:.2f}$\n"
+                f"Beneficio Realizado: {'+' if state.data['realized_profit']>0 else ''}{state.data['realized_profit']:.2f}$\n"
+                f"Balance diario: {'+' if daily_diff>0 else ''}{daily_diff:.2f}$\n"
+                f"Balance histórico: {'+' if hist_diff>0 else ''}{hist_diff:.2f}$"
             )
             send_telegram(resumen_msg)
             
@@ -278,7 +275,7 @@ while True:
             is_uptrend = price > prev_price
             trend_icon = "↗️" if is_uptrend else "↘️"
             
-            log_line += f"{pair.split('/')[0]}:{price:.1f}€({rsi:.0f}){trend_icon} | "
+            log_line += f"{pair.split('/')[0]}:{price:.1f}$({rsi:.0f}){trend_icon} | "
 
             if pos['amount'] > 0:
                 if price > pos['max_price_reached']:
@@ -311,7 +308,7 @@ while True:
                                 
                             except ccxt.InsufficientFunds as e:
                                 extra_logs.append(f"[ERROR] FUNDS: Tried to sell {pair} but no balance. {e}")
-                                send_telegram(f"⚠️ **ALERTA BINANCE**\nFallo al vender {par} (Fondos insuficientes o polvo).")
+                                send_telegram(f"⚠️ **ALERTA BINANCE**\nFallo al vender {pair} (Fondos insuficientes o polvo).")
                                 order_success = False
                             except Exception as e:
                                 extra_logs.append(f"[ERROR] SELL API {pair}: {e}")
@@ -324,14 +321,14 @@ while True:
                             
                             telegram_msg = (
                                 f"🟢 **VENTA TTP {pair}**\n"
-                                f"Bruto: {gross_total:.2f}€\n"
-                                f"Neto: {net_total:.2f}€\n"
-                                f"Ganancia Limpia: {net_profit:.4f}€\n"
-                                f"📈 Máx. Alcanzado: {max_reached:.2f}€\n"
-                                f"🎯 Gatillo Ejecutado: {sell_trigger:.2f}€"
+                                f"Bruto: {gross_total:.2f}$\n"
+                                f"Neto: {net_total:.2f}$\n"
+                                f"Ganancia Limpia: {net_profit:.4f}$\n"
+                                f"📈 Máx. Alcanzado: {max_reached:.2f}$\n"
+                                f"🎯 Gatillo Ejecutado: {sell_trigger:.2f}$"
                             )
                             send_telegram(telegram_msg)
-                            extra_logs.append(f"[TRADE] SELL completed for {pair} at {price}€.")
+                            extra_logs.append(f"[TRADE] SELL completed for {pair} at {price}$.")
                             
                             state.data['realized_profit'] += net_profit
                             save_history("VENTA_TTP", pair, price, sell_amount, net_total, max_reached)
@@ -343,7 +340,7 @@ while True:
                             state.save()
                             continue 
                     else:
-                        extra_logs.append(f"[TRAILING] {pair} in profit zone. Max: {max_reached:.2f}€. Trigger: {sell_trigger:.2f}€")
+                        extra_logs.append(f"[TRAILING] {pair} in profit zone. Max: {max_reached:.2f}$. Trigger: {sell_trigger:.2f}$")
 
             # --- BUY (SHIELDED + MACRO FILTER) ---
             if used_slots < MAX_SLOTS:
@@ -375,11 +372,11 @@ while True:
                         if not SIMULATION:
                             try:
                                 real_balances = exchange.fetch_balance()
-                                free_eur = real_balances.get('EUR', {}).get('free', 0.0)
+                                free_usdc = real_balances.get('USDC', {}).get('free', 0.0)
                                 
-                                if free_eur < SLOT_SIZE:
-                                    extra_logs.append(f"[ERROR] INSUFFICIENT EUR. Have {free_eur}€, need {SLOT_SIZE}€.")
-                                    send_telegram(f"🛑 **ALERTA LIQUIDEZ**\nIntento de compra de {pair} fallido.\nSaldo disponible: {free_eur:.2f}€.")
+                                if free_usdc < SLOT_SIZE:
+                                    extra_logs.append(f"[ERROR] INSUFFICIENT USDC. Have {free_usdc}$, need {SLOT_SIZE}$.")
+                                    send_telegram(f"🛑 **ALERTA LIQUIDEZ**\nIntento de compra de {pair} fallido.\nSaldo disponible: {free_usdc:.2f}$.")
                                     order_success = False
                                 else:
                                     exchange.create_market_buy_order(pair, rounded_amount)
@@ -397,9 +394,9 @@ while True:
                             new_amt = pos['amount'] + rounded_amount
                             new_avg = new_inv / new_amt
                             
-                            send_telegram(f"🔵 **COMPRA {buy_type} {pair}**\nPrecio: {price}€\nRecibido Neto: {rounded_amount}\nRSI: {rsi:.1f} ↗️")
+                            send_telegram(f"🔵 **COMPRA {buy_type} {pair}**\nPrecio: {price}$\nRecibido Neto: {rounded_amount}\nRSI: {rsi:.1f} ↗️")
                             save_history("COMPRA", pair, price, rounded_amount, SLOT_SIZE, 0.0)
-                            extra_logs.append(f"[TRADE] BUY completed for {pair} at {price}€.")
+                            extra_logs.append(f"[TRADE] BUY completed for {pair} at {price}$.")
                             
                             pos['amount'] = new_amt
                             pos['invested'] = new_inv
@@ -409,7 +406,7 @@ while True:
                             used_slots += 1
                             
                     else:
-                        extra_logs.append(f"[INFO] [{pair}] RSI/DCA signal detected, but blocked by Macro Downtrend (EMA 200 1H: {current_ema_200:.2f}€).")
+                        extra_logs.append(f"[INFO] [{pair}] RSI/DCA signal detected, but blocked by Macro Downtrend (EMA 200 1H: {current_ema_200:.2f}$).")
 
         print(log_line)
         log_daily(log_line)
