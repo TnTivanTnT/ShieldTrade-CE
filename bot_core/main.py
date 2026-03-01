@@ -11,7 +11,7 @@ import gc
 from datetime import datetime, timedelta
 
 # --- USER CONFIGURATION ---
-SIMULATION = False
+SIMULATION = True
 PAIRS = ['SOL/USDC', 'ETH/USDC']
 TOTAL_BUDGET = 58.44
 SLOT_SIZE = 14.5
