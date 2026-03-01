@@ -51,8 +51,8 @@ The system consists of two main components:
 - 🟢 **V3.3:** Shielded logic and rotative logs.
 - 🟢 **V4.0:** Implementation of the Trailing Take Profit engine (TTP).
 - 🟢 **V4.1:** HTF Trend Filter (EMA 200 1H) to avoid "falling knives" in bear markets.
-- 🟠 **V4.2:** Data Integrity Milestone: Atomic JSON storage and Auto-Reconciliation with Binance API at startup.
-- ⚪ **V4.2.1:** Production Milestone: First deployment with real capital (50€ Test).
+- 🟢 **V4.2:** Data Integrity Milestone: Atomic JSON storage and Auto-Reconciliation with Binance API at startup.
+- 🟠 **V4.2.1:** Production Milestone: First deployment with real capital (50€ Test).
 - ⚪ **V4.3:** TTP Optimization: Calibration of dynamic trailing gaps to maximize tick gains.
 - ⚪ **V4.4:** Backend Core: Integration with FastAPI for local/remote headless monitoring.
 - ⚪ **V5.0:** User Experience: Mobile App (Flet/Flutter) and secure Cloudflare Tunneling.
