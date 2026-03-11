@@ -9,11 +9,25 @@ import csv
 import glob
 import gc
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+import database
+
+# --- CARGAR CREDENCIALES ---
+load_dotenv("/app/.env")
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+API_KEY = os.getenv("API_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not all([TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, API_KEY, SECRET_KEY]):
+    print("[CRÍTICO] Faltan variables en el archivo .env. Bot detenido.")
+    exit()
 
 # --- USER CONFIGURATION ---
-SIMULATION = True
+SIMULATION = False
 PAIRS = ['SOL/USDC', 'ETH/USDC']
-TOTAL_BUDGET = 58.44
+TOTAL_BUDGET = 59.63
 SLOT_SIZE = 14.5
 MAX_SLOTS = int(TOTAL_BUDGET // SLOT_SIZE)
 
@@ -22,25 +36,20 @@ MAX_RSI_ENTRY = 45
 DCA_DROP_PERCENT = 0.03
 PROFIT_MARGIN = 0.015
 TRAILING_GAP = 0.003
-BINANCE_FEE = 0.001 # 0.1% for Market Taker orders
+BINANCE_FEE = 0.001
 LOG_RETENTION_DAYS = 15
 
 # Macro Filter
 EMA_MACRO_PERIOD = 200
 EMA_MACRO_TIMEFRAME = '1h'
 
-# --- CREDENTIALS ---
-TELEGRAM_TOKEN = "PEGA_AQUI_TU_TOKEN"
-TELEGRAM_CHAT_ID = "PEGA_AQUI_TU_ID"
-API_KEY = ''
-SECRET_KEY = '' 
-
 # --- PATHS ---
-CSV_FILE = "/app/trading_history_usdc.csv" # Nuevo archivo para no mezclar EUR con USDC
+CSV_FILE = "/app/trading_history_usdc.csv" 
 STATE_FILE = "/app/bot_state.json"
 LOGS_FOLDER = "/app/logs"
 
 # --- INITIALIZATION ---
+database.init_db()
 exchange = ccxt.binance({'enableRateLimit': True})
 if not SIMULATION:
     exchange.apiKey = API_KEY
@@ -81,34 +90,25 @@ class StateManager:
             "initial_balance": TOTAL_BUDGET,
             "yesterday_balance": TOTAL_BUDGET,
             "last_report_date": "",
+            "last_db_snapshot_hour": -1,
             "realized_profit": 0.0,
-            "portfolio": {pair: {"amount": 0.0, "avg_price": 0.0, "invested": 0.0, "max_price_reached": 0.0} for pair in PAIRS}
+            "portfolio": {pair: {"amount": 0.0, "avg_price": 0.0, "invested": 0.0, "max_price_reached": 0.0} for pair in PAIRS},
+            "current_market_prices": {} # Variable inyectada para la App
         }
         self.load()
         self.reconcile_balances()
 
     def load(self):
-        old_file = "/app/estado_bot.json"
-        target_file = STATE_FILE if os.path.exists(STATE_FILE) else (old_file if os.path.exists(old_file) else None)
-
-        if target_file:
+        if os.path.exists(STATE_FILE):
             try:
-                with open(target_file, 'r') as f:
+                with open(STATE_FILE, 'r') as f:
                     loaded_data = json.load(f)
-                    
-                    # Detectar si estamos migrando de EUR a USDC
-                    old_pairs = list(loaded_data.get("portfolio", loaded_data.get("cartera", {})).keys())
-                    if old_pairs and "USDC" not in old_pairs[0]:
-                        msg = "[INFO] Detectado cambio de EUR a USDC. Reseteando memoria JSON para empezar limpio."
-                        print(msg)
-                        log_daily(msg)
-                        self.save() # Guarda el estado base limpio en USDC
-                        return
-
                     self.data["initial_balance"] = loaded_data.get("initial_balance", TOTAL_BUDGET)
                     self.data["yesterday_balance"] = loaded_data.get("yesterday_balance", TOTAL_BUDGET)
                     self.data["last_report_date"] = loaded_data.get("last_report_date", "")
+                    self.data["last_db_snapshot_hour"] = loaded_data.get("last_db_snapshot_hour", -1)
                     self.data["realized_profit"] = loaded_data.get("realized_profit", 0.0)
+                    self.data["current_market_prices"] = loaded_data.get("current_market_prices", {})
                     
                     if "portfolio" in loaded_data:
                         for pair, info in loaded_data["portfolio"].items():
@@ -122,7 +122,10 @@ class StateManager:
                 print(msg)
                 log_daily(msg)
 
-    def save(self):
+    def save(self, live_prices=None):
+        if live_prices is not None:
+            self.data["current_market_prices"] = live_prices
+            
         tmp_file = f"{STATE_FILE}.tmp"
         try:
             with open(tmp_file, 'w') as f:
@@ -154,6 +157,11 @@ class StateManager:
                     log_daily(f"[WARNING] Found {real_amount} {base_coin} in Binance not tracked in JSON. Ignoring to protect DCA math.")
             
             if changed: self.save()
+        except ccxt.ExchangeError as e:
+            err_str = str(e)
+            if '-2015' in err_str or 'Invalid API-key, IP, or permissions' in err_str:
+                send_telegram("🚨 **ERROR DE SEGURIDAD**: Binance ha rechazado la IP actual. Actualiza la IP en el panel de Binance.")
+                log_daily("[ERROR] IP Rechazada por Binance (-2015) durante reconciliación.")
         except Exception as e:
             log_daily(f"[ERROR] Auto-reconciliation failed: {e}")
 
@@ -202,11 +210,16 @@ def get_market_data(pair):
         price_cache[pair] = current_price
         return current_price, rsi, previous_price
         
+    except ccxt.ExchangeError as e:
+        err_str = str(e)
+        if '-2015' in err_str or 'Invalid API-key, IP, or permissions' in err_str:
+            log_daily(f"[ERROR] IP Rechazada por Binance (-2015) obteniendo datos de {pair}.")
+            send_telegram("🚨 **ERROR DE SEGURIDAD**: Binance ha rechazado la IP actual. Actualiza la IP en el panel de Binance.")
+        else:
+            log_daily(f"[ERROR] Binance Exchange Error ({pair}): {e}")
+        return 0, 100, 999999
     except ccxt.NetworkError:
         log_daily(f"[ERROR] Binance Network Error ({pair}): Skipping cycle...")
-        return 0, 100, 999999
-    except ccxt.ExchangeError:
-        log_daily(f"[ERROR] Binance Exchange Error ({pair}): Skipping cycle...")
         return 0, 100, 999999
     except Exception as e:
         log_daily(f"[ERROR] Critical fetch error ({pair}): {e}")
@@ -228,10 +241,10 @@ def verify_macro_trend(pair):
         return float('inf')
 
 # --- MAIN LOOP ---
-start_msg = "[INFO] 🤖 BOT V4.2.1: USDC Migration & Atomic Write"
+start_msg = "[INFO] 🤖 BOT V4.4: App Backend & Env Security"
 print(start_msg)
 log_daily(start_msg)
-send_telegram("🚀 **Bot V4.2.1 Iniciado**\nModo: Simulación USDC 🛡️\nMotor: TTP Dinámico + EMA200 1H")
+send_telegram("🚀 **Bot V4.4 Iniciado**\nBackend: DB & API Preparadas 🛡️\nMotor: TTP Dinámico + EMA200 1H")
 
 while True:
     try:
@@ -239,6 +252,19 @@ while True:
         used_slots = state.get_used_slots()
         today_str = now.strftime("%Y-%m-%d")
         
+        # Snapshot SQLite Horario
+        if now.minute == 0 and state.data.get('last_db_snapshot_hour') != now.hour:
+            equity = calculate_total_equity()
+            sol_px = price_cache.get('SOL/USDC', 0.0)
+            eth_px = price_cache.get('ETH/USDC', 0.0)
+            
+            # Solo guardamos si ya tenemos datos reales
+            if sol_px > 0 and eth_px > 0:
+                database.save_snapshot(equity, sol_px, eth_px)
+                state.data['last_db_snapshot_hour'] = now.hour
+                state.save()
+        
+        # Reporte Diario Telegram
         if now.hour >= 10 and state.data['last_report_date'] != today_str:
             for pair in PAIRS:
                 get_market_data(pair)
@@ -306,6 +332,14 @@ while True:
                                 exchange.create_market_sell_order(pair, sell_amount)
                                 extra_logs.append(f"[TRADE] ✅ ORDER EXECUTED: SELL {sell_amount} {pair}")
                                 
+                            except ccxt.ExchangeError as e:
+                                err_str = str(e)
+                                if '-2015' in err_str or 'Invalid API-key, IP, or permissions' in err_str:
+                                    extra_logs.append(f"[ERROR] IP Rechazada por Binance (-2015) al vender {pair}.")
+                                    send_telegram("🚨 **ERROR DE SEGURIDAD**: Binance ha rechazado la IP actual. Actualiza la IP.")
+                                else:
+                                    extra_logs.append(f"[ERROR] SELL API {pair}: {e}")
+                                order_success = False
                             except ccxt.InsufficientFunds as e:
                                 extra_logs.append(f"[ERROR] FUNDS: Tried to sell {pair} but no balance. {e}")
                                 send_telegram(f"⚠️ **ALERTA BINANCE**\nFallo al vender {pair} (Fondos insuficientes o polvo).")
@@ -382,6 +416,14 @@ while True:
                                     exchange.create_market_buy_order(pair, rounded_amount)
                                     extra_logs.append(f"[TRADE] ✅ ORDER EXECUTED: BUY {rounded_amount} {pair}")
                                     
+                            except ccxt.ExchangeError as e:
+                                err_str = str(e)
+                                if '-2015' in err_str or 'Invalid API-key, IP, or permissions' in err_str:
+                                    extra_logs.append(f"[ERROR] IP Rechazada por Binance (-2015) al comprar {pair}.")
+                                    send_telegram("🚨 **ERROR DE SEGURIDAD**: Binance ha rechazado la IP actual. Actualiza la IP.")
+                                else:
+                                    extra_logs.append(f"[ERROR] BUY API {pair}: {e}")
+                                order_success = False
                             except ccxt.InsufficientFunds as e:
                                 extra_logs.append(f"[ERROR] FUNDS: Binance rejected buy for {pair}. {e}")
                                 order_success = False
@@ -413,6 +455,9 @@ while True:
         for msg in extra_logs:
             print(msg)
             log_daily(msg)
+            
+        # ¡LO NUEVO! Antes de dormir, inyectamos los precios en el JSON para la Web
+        state.save(live_prices=price_cache) 
             
         time.sleep(60)
 

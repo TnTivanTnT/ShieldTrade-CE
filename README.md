@@ -13,11 +13,10 @@ The bot is designed to be flexible and safe for beginners:
     * `False`: Connects to Binance API for live trading.
 * **Real-time Notifications:** Uses Telegram Bot API to send instant alerts for every buy, sell, and trailing update.
 
-## 🟠 Current Status
-**Important:** As of March 1, 2026, the bot is running in a **Controlled Live Environment**.
-* The current active deployment (V4.2.1) represents the first production milestone using real capital (50€ test budget).
-* Core data integrity mechanisms (Auto-Reconciliation) and HTF Trend Filters (EMA 200) are actively protecting this initial capital.
-* **Caution:** While running live, this remains an experimental version. Monitoring is strict to validate the Trailing Take Profit (TTP) and DCA logic under real market conditions.
+## 🟠 Current Status: Live Testing
+**Important:** As of March 11, 2026, the bot is running in a live environment with real capital.
+* The current active deployment (V4.4) includes backend for web monitoring and TTP optimization.
+* Core data integrity mechanisms (Auto-Reconciliation) and HTF Trend Filters (EMA 200) are actively protecting capital.
 
 ## 🛠️  Setup Instructions
 1. **Telegram Setup:** Create a bot via [@BotFather](https://t.me/botfather) and retrieve your `TELEGRAM_TOKEN` and `CHAT_ID`.
@@ -29,6 +28,7 @@ The bot is designed to be flexible and safe for beginners:
    ```
 
 ## 🚀 Key Features
+* **Visual app:** Implement a web to check local data and comparing to binance app.
 * **Data Integrity & Auto-Reconciliation (V4.2):** Implements atomic JSON storage and synchronizes directly with Binance API on startup to prevent silent state failures.
 * **Fully English Core (i18n):** Standardized English codebase, variables, and rotative logs for better open-source collaboration.
 * **HTF Trend Filtering (V4.1):** Utilizes EMA 200 on higher timeframes to block entries during macro downtrends (prevents "falling knife" scenarios).
@@ -52,9 +52,9 @@ The system consists of two main components:
 - 🟢 **V4.0:** Implementation of the Trailing Take Profit engine (TTP).
 - 🟢 **V4.1:** HTF Trend Filter (EMA 200 1H) to avoid "falling knives" in bear markets.
 - 🟢 **V4.2:** Data Integrity Milestone: Atomic JSON storage and Auto-Reconciliation with Binance API at startup.
-- 🟠 **V4.2.1:** Production Milestone: First deployment with real capital (50€ Test).
-- ⚪ **V4.3:** TTP Optimization: Calibration of dynamic trailing gaps to maximize tick gains.
-- ⚪ **V4.4:** Backend Core: Integration with FastAPI for local/remote headless monitoring.
+- 🟢 **V4.2.1:** Production Milestone: First deployment with real capital (50€ Test).
+- 🟢 **V4.3:** TTP Optimization: Calibration of dynamic trailing gaps to maximize tick gains.
+- 🟢 **V4.4:** Backend Core: Integration with FastAPI for local/remote headless monitoring.
 - ⚪ **V5.0:** User Experience: Mobile App (Flet/Flutter) and secure Cloudflare Tunneling.
 
 ## 🎓 Maintenance & Development Status
