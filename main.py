@@ -19,7 +19,7 @@ API_KEY = os.getenv("API_KEY")
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # --- CONFIGURACIÓN MAESTRA V5.1 ---
-SIMULATION = False         # True: Dinero ficticio | False: Operativa Real en Binance
+SIMULATION = True         # True: Dinero ficticio | False: Operativa Real en Binance
 TOTAL_BUDGET = 65.80       # Capital base de control
 BASE_SLOT_USDC = 14.40     # Tamaño de cada slot inicial
 MAX_SLOTS_LIMIT = 6        # Máximo de slots permitidos
