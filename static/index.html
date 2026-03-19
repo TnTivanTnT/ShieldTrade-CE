@@ -3,115 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShieldTrade App</title>
+    <title>ShieldTrade V5.1 Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .status-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        button.active { background-color: #3b82f6; color: white; border-color: #60a5fa; }
+    </style>
 </head>
-<body class="bg-gray-900 text-white font-sans p-4 md:p-8">
-    <div class="max-w-md mx-auto">
-        
-        <header class="flex justify-between items-center mb-6 mt-4">
-            <h1 class="text-2xl font-bold text-blue-400">ShieldTrade</h1>
-            <div class="flex items-center gap-2 text-xs text-gray-400" id="connection-status">
-                <div class="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                API Local
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans p-2">
+    <div class="max-w-4xl mx-auto">
+        <header class="flex justify-between items-center mb-4 px-2">
+            <h1 class="text-xl font-bold text-blue-400 italic">🛡️ SHIELDTRADE <span class="text-[10px] text-gray-500 not-italic font-normal">V5.1</span></h1>
+            <div class="bg-gray-800 px-2 py-1 rounded-full text-[9px] flex items-center">
+                <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-2 status-pulse"></span> LIVE
             </div>
         </header>
 
-        <div class="bg-gray-800 rounded-2xl p-6 mb-6 shadow-lg border border-gray-700">
-            <div class="flex justify-between items-end mb-1">
-                <p class="text-gray-400 text-sm">Capital Total (Flotante)</p>
-                <p class="text-xs text-gray-500" id="last-update">--:--</p>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+            <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
+                <p class="text-gray-500 text-[9px] uppercase font-black">Patrimonio Total</p>
+                <h2 id="total-equity" class="text-lg md:text-2xl font-mono">0.00$</h2>
             </div>
-            <h2 class="text-4xl font-bold mb-1" id="total-equity">-- $</h2>
-            
-            <div class="flex gap-4 mt-4 pt-4 border-t border-gray-700 text-sm">
-                <div class="flex-1">
-                    <p class="text-gray-500 text-xs mb-1">Inicial</p>
-                    <p class="font-medium" id="initial-balance">-- $</p>
-                </div>
-                <div class="flex-1 text-right">
-                    <p class="text-gray-500 text-xs mb-1">Beneficio Realizado</p>
-                    <p class="text-green-400 font-semibold" id="realized-profit">-- $</p>
-                </div>
+            <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
+                <p class="text-gray-500 text-[9px] uppercase font-black">Net Profit (Global)</p>
+                <h2 id="realized-profit" class="text-lg md:text-2xl font-mono text-gray-400">0.00$</h2>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 col-span-2 md:col-span-1 flex justify-between items-center">
+                <div><p class="text-gray-500 text-[9px] uppercase font-black">Slots</p><h2 id="slots-count" class="text-lg font-mono text-blue-400">0/0</h2></div>
+                <div class="text-right"><p class="text-gray-500 text-[9px] uppercase font-black">Libre (Binance)</p><h2 id="free-cash" class="text-sm font-mono text-gray-300">0$</h2></div>
             </div>
         </div>
 
-        <h3 class="text-lg font-semibold mb-4 text-gray-300">Posiciones Abiertas</h3>
-        <div id="positions-container" class="space-y-3">
-            <p class="text-gray-500 text-sm text-center py-4">Cargando datos locales...</p>
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <select id="rangeSelector" onchange="loadHistory()" class="bg-gray-700 text-[10px] rounded px-1 py-1 outline-none border-none">
+                    <option value="1d">24H</option><option value="1w">Semana</option><option value="1m">Mes</option><option value="all">Todo</option>
+                </select>
+                <div class="flex gap-1">
+                    <button id="btn-val" onclick="toggleMode('val')" class="active border border-gray-600 px-2 py-0.5 rounded text-[8px]">USD</button>
+                    <button id="btn-pct" onclick="toggleMode('pct')" class="border border-gray-600 px-2 py-0.5 rounded text-[8px]">%</button>
+                </div>
+            </div>
+            <div style="height: 180px;"><canvas id="mainChart"></canvas></div>
         </div>
 
+        <div id="market-grid" class="grid grid-cols-2 gap-2"></div>
     </div>
 
     <script>
-        async function updateDashboard() {
-            try {
-                // Leemos solo de nuestra API local
-                const statusResponse = await fetch('/status');
-                if (!statusResponse.ok) throw new Error("API Bot Offline");
-                const botData = await statusResponse.json();
-
-                const container = document.getElementById('positions-container');
-                container.innerHTML = '';
-                
-                let totalInvestedValue = 0; 
-                let cashBalance = botData.initial_balance + botData.realized_profit; 
-                const marketPrices = botData.current_market_prices || {}; // Precios leídos por el bot
-
-                if (botData.portfolio && Object.keys(botData.portfolio).length > 0) {
-                    for (const [pair, details] of Object.entries(botData.portfolio)) {
-                        
-                        cashBalance -= details.invested;
-                        const currentPrice = marketPrices[pair];
-                        
-                        if (currentPrice) {
-                            const currentValue = details.amount * currentPrice;
-                            totalInvestedValue += currentValue;
-
-                            const pnlValue = currentValue - details.invested;
-                            const pnlPercent = (pnlValue / details.invested) * 100;
-                            const isPositive = pnlValue >= 0;
-                            const colorClass = isPositive ? 'text-green-400' : 'text-red-400';
-                            const sign = isPositive ? '+' : '';
-
-                            container.innerHTML += `
-                                <div class="bg-gray-800 rounded-xl p-4 border border-gray-700 flex justify-between items-center">
-                                    <div>
-                                        <p class="font-bold text-lg">${pair.split('/')[0]}</p>
-                                        <p class="text-xs text-gray-400">${details.amount} tokens</p>
-                                    </div>
-                                    <div class="text-right">
-                                        <p class="font-bold ${colorClass}">${sign}${pnlValue.toFixed(2)}$ (${sign}${pnlPercent.toFixed(2)}%)</p>
-                                        <p class="text-xs text-gray-500">Comprado: ${details.avg_price.toFixed(2)}$</p>
-                                        <p class="text-xs text-gray-500">Mercado: ${currentPrice.toFixed(2)}$</p>
-                                    </div>
-                                </div>
-                            `;
-                        } else {
-                             container.innerHTML += `<div class="bg-gray-800 rounded-xl p-4 border border-gray-700 text-gray-500 text-sm">Esperando precio de ${pair}...</div>`;
-                        }
-                    }
-                } else {
-                    container.innerHTML = `<p class="text-gray-500 text-sm text-center py-4">No hay operaciones abiertas.</p>`;
-                }
-
-                const totalEquity = cashBalance + totalInvestedValue;
-
-                document.getElementById('total-equity').innerText = totalEquity.toFixed(2) + ' $';
-                document.getElementById('initial-balance').innerText = botData.initial_balance.toFixed(2) + ' $';
-                document.getElementById('realized-profit').innerText = '+ ' + botData.realized_profit.toFixed(2) + ' $';
-                
-                const now = new Date();
-                document.getElementById('last-update').innerText = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0');
-                
-            } catch (error) {
-                console.error("Fallo general:", error);
-            }
+        let mainChart; let chartMode = 'val';
+        function initChart() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            mainChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.05)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: '#1f2937' }, ticks: { font: { size: 8 }, color: '#9ca3af' } } } }
+            });
+        }
+        async function loadHistory() {
+            const range = document.getElementById('rangeSelector').value;
+            const res = await fetch(`/history?range=${range}`);
+            const history = await res.json();
+            if (history.length === 0) return;
+            mainChart.data.labels = history.map(h => h.timestamp);
+            if (chartMode === 'val') { mainChart.data.datasets[0].data = history.map(h => h.total_usdc); } 
+            else { const start = history[0].total_usdc; mainChart.data.datasets[0].data = history.map(h => ((h.total_usdc / start) - 1) * 100); }
+            mainChart.update();
         }
 
-        updateDashboard();
-        // Recargar cada 5 segundos (solo lee el JSON local)
-        setInterval(updateDashboard, 5000);
+        async function updateStatus() {
+            const res = await fetch('/status'); 
+            const data = await res.json();
+            if (data.error) return;
+
+            let coinVal = 0;
+            for(let p in data.portfolio) { 
+                coinVal += data.portfolio[p].amount * (data.current_market_prices[p]?.price || 0);
+            }
+
+            const freeCash = data.free_usdc_real || 0;
+            const eq = freeCash + coinVal; 
+            const netProfit = eq - data.initial_balance;
+            const totalCap = data.initial_balance + data.realized_profit;
+
+            document.getElementById('total-equity').innerText = eq.toFixed(2) + '$';
+            document.getElementById('free-cash').innerText = freeCash.toFixed(2) + '$';
+
+            const profitElement = document.getElementById('realized-profit');
+            profitElement.innerText = (netProfit >= 0 ? '+' : '') + netProfit.toFixed(2) + '$';
+            
+            if (netProfit >= 0) {
+                profitElement.classList.remove('text-red-400', 'text-gray-400');
+                profitElement.classList.add('text-green-400');
+            } else {
+                profitElement.classList.remove('text-green-400', 'text-gray-400');
+                profitElement.classList.add('text-red-400');
+            }
+
+            const baseSlot = 14.40;
+            const maxLimit = 6;
+            let maxSlots, slotSize;
+            if (totalCap < (baseSlot * maxLimit)) {
+                maxSlots = Math.floor(totalCap / baseSlot); slotSize = baseSlot;
+            } else {
+                maxSlots = maxLimit; slotSize = totalCap / maxLimit;
+            }
+
+            const investedAmount = totalCap - freeCash;
+            const usedSlots = Math.round(investedAmount / slotSize);
+            document.getElementById('slots-count').innerText = `${usedSlots} / ${maxSlots}`;
+            
+            let gridHtml = '';
+            for (const p in data.portfolio) {
+                const coin = p.split('/')[0]; 
+                const m = data.current_market_prices[p] || {price: 0, rsi: 0};
+                const inPos = data.portfolio[p].amount > 0;
+                gridHtml += `
+                    <div class="bg-gray-800 p-3 rounded-xl border ${inPos ? 'border-blue-500' : 'border-gray-700'}">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] font-bold text-gray-400">${coin}</span>
+                            <span class="text-[8px] ${m.rsi < 45 ? 'text-green-400' : 'text-gray-500'}">RSI ${m.rsi}</span>
+                        </div>
+                        <p class="text-sm font-mono">${m.price.toFixed(2)}$</p>
+                        <p class="text-[9px] font-mono mt-1 ${inPos ? 'text-blue-400' : 'text-gray-600'}">
+                            ${inPos ? (((m.price / data.portfolio[p].avg_price) - 1) * 100).toFixed(2) + '%' : 'ACECHO'}
+                        </p>
+                    </div>`;
+            }
+            document.getElementById('market-grid').innerHTML = gridHtml;
+        }
+
+        function toggleMode(m) { chartMode = m; document.getElementById('btn-val').classList.toggle('active', m === 'val'); document.getElementById('btn-pct').classList.toggle('active', m === 'pct'); loadHistory(); }
+        window.onload = () => { initChart(); loadHistory(); updateStatus(); setInterval(updateStatus, 10000); setInterval(loadHistory, 3600000); };
     </script>
 </body>
 </html>

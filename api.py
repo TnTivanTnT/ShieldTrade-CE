@@ -9,49 +9,35 @@ app = FastAPI(title="ShieldTrade API")
 STATE_FILE = "/app/bot_state.json"
 DB_PATH = "/app/shieldtrade.db"
 
-# 1. Ruta principal: Carga la Interfaz Visual (HTML)
 @app.get("/")
 def serve_app():
     return FileResponse("/app/static/index.html")
 
-# 2. Ruta de estado: El motor interno para los números actuales
 @app.get("/status")
 def get_status():
     try:
-        if not os.path.exists(STATE_FILE):
-            return {"error": "Estado no disponible todavía"}
-        with open(STATE_FILE, "r") as f:
-            data = json.load(f)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        if not os.path.exists(STATE_FILE): return {"error": "Esperando datos..."}
+        with open(STATE_FILE, "r") as f: return json.load(f)
+    except: raise HTTPException(status_code=500, detail="Error de lectura")
 
-# 3. Ruta de historial: Extrae datos de SQLite para la futura gráfica
 @app.get("/history")
-def get_history():
+def get_history(range: str = "1d"):
     try:
-        if not os.path.exists(DB_PATH):
-            return []
+        hours_map = {"1d": 24, "1w": 168, "1m": 720, "all": 9999}
+        hours = hours_map.get(range, 24)
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        c.execute("SELECT * FROM equity_history ORDER BY timestamp DESC LIMIT 168") # Última semana (168 horas)
+        c.execute("SELECT * FROM equity_history WHERE timestamp >= datetime('now', ?) ORDER BY timestamp ASC", (f'-{hours} hours',))
         rows = c.fetchall()
         conn.close()
         return [dict(row) for row in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except: return []
 
-# 4. Ruta de salud: Monitorización del bot
 @app.get("/health")
 def health_check():
-    if not os.path.exists(STATE_FILE):
-        return {"status": "error", "message": "Archivo de estado no encontrado"}
-    
-    last_modified = os.path.getmtime(STATE_FILE)
-    age_seconds = time.time() - last_modified
-    
-    # Si hace más de 5 minutos que el bot no actualiza el JSON
-    if age_seconds > 300: 
-        return {"status": "warning", "message": f"Última escritura hace {int(age_seconds)}s"}
-    return {"status": "healthy", "message": "Bot escribiendo con normalidad"}
+    try:
+        last_mod = os.path.getmtime(STATE_FILE)
+        age = time.time() - last_mod
+        return {"status": "healthy" if age < 300 else "warning", "age": int(age)}
+    except: return {"status": "error"}

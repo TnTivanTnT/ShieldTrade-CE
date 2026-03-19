@@ -13,10 +13,10 @@ The bot is designed to be flexible and safe for beginners:
     * `False`: Connects to Binance API for live trading.
 * **Real-time Notifications:** Uses Telegram Bot API to send instant alerts for every buy, sell, and trailing update.
 
-## 🟠 Current Status: Live Testing
-**Important:** As of March 11, 2026, the bot is running in a live environment with real capital.
-* The current active deployment (V4.4) includes backend for web monitoring and TTP optimization.
-* Core data integrity mechanisms (Auto-Reconciliation) and HTF Trend Filters (EMA 200) are actively protecting capital.
+## 🟠 Current Status: V5.1 Titanium Sync
+**Important:** As of March 19, 2026, the bot is running in a live environment with real capital.
+* **Titanium Sync:** High-frequency balance reconciliation. The bot synchronizes directly with Binance API every 10 seconds to ensure the dashboard and exchange are perfectly aligned.
+* **Net Profit Dashboard:** Implementation of real-time global profit calculation (Realized + Latent) for a 100% transparent view of the portfolio's health.
 
 ## 🛠️  Setup Instructions
 1. **Telegram Setup:** Create a bot via [@BotFather](https://t.me/botfather) and retrieve your `TELEGRAM_TOKEN` and `CHAT_ID`.
@@ -28,34 +28,35 @@ The bot is designed to be flexible and safe for beginners:
    ```
 
 ## 🚀 Key Features
-* **Visual app:** Implement a web to check local data and comparing to binance app.
-* **Data Integrity & Auto-Reconciliation (V4.2):** Implements atomic JSON storage and synchronizes directly with Binance API on startup to prevent silent state failures.
-* **Fully English Core (i18n):** Standardized English codebase, variables, and rotative logs for better open-source collaboration.
-* **HTF Trend Filtering (V4.1):** Utilizes EMA 200 on higher timeframes to block entries during macro downtrends (prevents "falling knife" scenarios).
+* **Titanium Real-Time Sync (V5.1):** Eliminates data drift by reading the actual USDC balance from Binance in every execution cycle.
+* **Visual Web App (V5.0):** Real-time dashboard to monitor performance, RSI levels, and market trends locally.
+* **Data Integrity & Auto-Reconciliation:** Atomic JSON storage and forced synchronization at startup to prevent silent state failures.
+* **HTF Trend Filtering (V4.1):** Utilizes EMA 200 on 1H timeframe to block entries during macro bear trends.
 * **Dynamic Trailing Take Profit (V4.0):** Tracks market momentum to capture maximum gains beyond the initial 1.5% target.
-* **Shielded Execution:** Logic-gate architecture that prevents internal state updates if API orders fail.
-* **Non-Custodial & Secure:** API keys are stored locally. No external servers ever touch your credentials.
-* **Multi-Pair Support:** Optimized for SOL/EUR and ETH/EUR.
+* **Anti-Dust Pro:** Complete position clearing by querying the real balance (free) before each sale, preventing coin remnants from being left in the exchange.
+* **Interest Compound Scaling:** Automatic management of up to 6 slots, increasing position size as capital grows.
 
-## 🏗️  Architecture
-The system consists of two main components:
-1.  **Bot Core:** A Python engine running FastAPI that handles all market interactions and strategy execution.
-2.  **Mobile Dashboard:** A cross-platform app (Flet/Flutter) that connects to the Core via secure tunnels.
+## 🏗️ Architecture
+1. Bot Core: Python engine (CCXT) managing logic and market interaction.
+2. API Backend: FastAPI serving the internal state and equity history.
+3. Frontend: Real-time web dashboard (Tailwind CSS + Chart.js).
 
 ## 🛡️  Security First
 * **Zero-Trust:** Designed to be exposed via Cloudflare Tunnels with secondary password authentication.
 * **Safety Net:** Built-in balance checks before any trade execution.
 * **Withdrawal Protection:** Users are encouraged to disable "Withdrawal" permissions on their API keys.
 
-## 🗺️  Roadmap ShieldTrade-CE
+## 🗺️ Roadmap ShieldTrade-CE
 - 🟢 **V3.3:** Shielded logic and rotative logs.
 - 🟢 **V4.0:** Implementation of the Trailing Take Profit engine (TTP).
-- 🟢 **V4.1:** HTF Trend Filter (EMA 200 1H) to avoid "falling knives" in bear markets.
-- 🟢 **V4.2:** Data Integrity Milestone: Atomic JSON storage and Auto-Reconciliation with Binance API at startup.
+- 🟢 **V4.1:** HTF Trend Filter (EMA 200 1H) to avoid "falling knives".
+- 🟢 **V4.2:** Data Integrity: Atomic JSON storage and Auto-Reconciliation.
 - 🟢 **V4.2.1:** Production Milestone: First deployment with real capital (50€ Test).
-- 🟢 **V4.3:** TTP Optimization: Calibration of dynamic trailing gaps to maximize tick gains.
-- 🟢 **V4.4:** Backend Core: Integration with FastAPI for local/remote headless monitoring.
-- ⚪ **V5.0:** User Experience: Mobile App (Flet/Flutter) and secure Cloudflare Tunneling.
+- 🟢 **V4.3:** TTP Optimization: Calibration of dynamic trailing gaps.
+- 🟢 **V4.4:** Backend Core: Integration with FastAPI for monitoring.
+- 🟢 **V5.0:** User Experience: First Web App deployment.
+- 🟢 **V5.1:** **Scalable Code & Titanium Sync:** Multi-slot logic and real-time balance reconciliation.
+- 🟠 **V5.2:** Easy install / Docker-compose orchestration.
 
 ## 🎓 Maintenance & Development Status
 **ShieldTrade-CE** is a personal learning project and a hobby.
