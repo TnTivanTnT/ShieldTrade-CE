@@ -12,6 +12,8 @@ import database
 
 load_dotenv("/app/.env")
 
+SIMULATION = True
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 API_KEY = os.getenv("API_KEY")
