@@ -29,6 +29,8 @@ MAX_RSI_ENTRY = 45
 DCA_DROP_PERCENT = 0.03
 PROFIT_MARGIN = 0.015
 TRAILING_GAP = 0.003
+ATR_PERIOD = 14          # Periodos para calcular la volatilidad
+ATR_MULTIPLIER = 1.5     # Multiplicador del ATR para el Stop-Loss
 EMA_MACRO_PERIOD = 200
 EMA_MACRO_TIMEFRAME = '1h'
 
@@ -83,8 +85,10 @@ def get_market_data(pair):
         ticker = exchange.fetch_ticker(pair)
         ohlcv = exchange.fetch_ohlcv(pair, timeframe='5m', limit=50)
         df = pd.DataFrame(ohlcv, columns=['time', 'open', 'high', 'low', 'close', 'vol'])
-        return ticker['last'], df.ta.rsi(length=14).iloc[-1], df['close'].iloc[-2]
-    except: return 0, 100, 0
+        rsi = df.ta.rsi(length=14).iloc[-1]
+        atr = df.ta.atr(length=ATR_PERIOD).iloc[-1]
+        return ticker['last'], rsi, df['close'].iloc[-2], atr
+    except: return 0, 100, 0, 0
 
 def verify_macro_trend(pair):
     try:
@@ -128,19 +132,24 @@ while True:
         log_line = f"Cap:{total_cap:.2f}$ | Slot:{current_slot_size}$ | "
         
         for pair in PAIRS:
-            price, rsi, prev_price = get_market_data(pair)
+            price, rsi, prev_price, atr = get_market_data(pair)
             if price == 0: continue
-            price_cache[pair] = {"price": price, "rsi": round(rsi, 2)}
+            price_cache[pair] = {"price": price, "rsi": round(rsi, 2), "atr": round(atr, 4)}
             pos = state.data['portfolio'][pair]
             log_line += f"{pair.split('/')[0]}:{price:.2f}$ | "
 
-            # --- LÓGICA DE VENTA (Trailing Take Profit) ---
+            # --- LÓGICA DE VENTA (Trailing Take Profit y Stop-Loss ATR) ---
             if pos['amount'] > 0:
                 if price > pos['max_price_reached']: 
                     pos['max_price_reached'] = price
                 
                 target = pos['avg_price'] * (1 + PROFIT_MARGIN)
-                if price >= target and price <= (pos['max_price_reached'] * (1 - TRAILING_GAP)):
+                sl_price = pos['avg_price'] - (atr * ATR_MULTIPLIER)
+                
+                is_ttp_sell = price >= target and price <= (pos['max_price_reached'] * (1 - TRAILING_GAP))
+                is_sl_sell = price <= sl_price
+                
+                if is_ttp_sell or is_sl_sell:
                     sell_amt = pos['amount']
                     profit = 0
                     
@@ -156,7 +165,11 @@ while True:
                     with open(CSV_FILE, 'a', newline='') as f:
                         csv.writer(f).writerow([now.strftime('%Y-%m-%d %H:%M:%S'), pair, 'SELL', price, sell_amt, profit])
                     
-                    msg = f"🟢 VENTA {pair} | +{profit:.2f}$"
+                    if is_ttp_sell:
+                        msg = f"🟢 VENTA TTP {pair} | +{profit:.2f}$"
+                    else:
+                        msg = f"🔴 STOP-LOSS {pair} | {profit:.2f}$"
+                        
                     send_telegram(msg); log_daily(msg)
                     pos.update({"amount": 0.0, "invested": 0.0, "avg_price": 0.0, "max_price_reached": 0.0})
                     state.save()
