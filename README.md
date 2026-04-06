@@ -13,10 +13,16 @@ The bot is designed to be flexible and safe for beginners:
     * `False`: Connects to Binance API for live trading.
 * **Real-time Notifications:** Uses Telegram Bot API to send instant alerts for every buy, sell, and trailing update.
 
-## 🟠 Current Status: V5.1 Titanium Sync
-**Important:** As of March 19, 2026, the bot is running in a live environment with real capital.
-* **Titanium Sync:** High-frequency balance reconciliation. The bot synchronizes directly with Binance API every 10 seconds to ensure the dashboard and exchange are perfectly aligned.
-* **Net Profit Dashboard:** Implementation of real-time global profit calculation (Realized + Latent) for a 100% transparent view of the portfolio's health.
+## 🟠 Current Status: V5.2 Simons Edition
+
+**Update Date:** April 6, 2026.
+The bot is currently running in a **live environment** with a liquid capital of **60.72 USDC**.
+* **Algorithmic Core:** Successfully transitioned to **Mean Reversion Statistical Arbitrage**. The bot is currently in "Statistical Stalking" mode.
+* **Execution Metrics:**
+    * **Z-Score Entry Threshold:** Set at $-2.0\sigma$.
+    * **Cycle Frequency:** 10 seconds.
+    * **Market Status:** Neutral/Bullish (Current $\sigma$ levels ranging between +0.5 and +1.3).
+* **Next Milestone:** Monitor entry behavior under the new statistical model before deploying Variable TTP (V5.3).
 
 ## 🛠️  Setup Instructions
 1. **Telegram Setup:** Create a bot via [@BotFather](https://t.me/botfather) and retrieve your `TELEGRAM_TOKEN` and `CHAT_ID`.
@@ -28,13 +34,12 @@ The bot is designed to be flexible and safe for beginners:
    ```
 
 ## 🚀 Key Features
-* **Titanium Real-Time Sync (V5.1):** Eliminates data drift by reading the actual USDC balance from Binance in every execution cycle.
-* **Visual Web App (V5.0):** Real-time dashboard to monitor performance, RSI levels, and market trends locally.
-* **Data Integrity & Auto-Reconciliation:** Atomic JSON storage and forced synchronization at startup to prevent silent state failures.
-* **HTF Trend Filtering (V4.1):** Utilizes EMA 200 on 1H timeframe to block entries during macro bear trends.
-* **Dynamic Trailing Take Profit (V4.0):** Tracks market momentum to capture maximum gains beyond the initial 1.5% target.
-* **Anti-Dust Pro:** Complete position clearing by querying the real balance (free) before each sale, preventing coin remnants from being left in the exchange.
-* **Interest Compound Scaling:** Automatic management of up to 6 slots, increasing position size as capital grows.
+* **Statistical Z-Score Entry (V5.2):** Quantitative logic that eliminates RSI noise. It triggers only when the price deviates -2.0 standard deviations from the mean (Gaussian Distribution).
+* **Titanium Real-Time Sync:** High-frequency balance reconciliation. The bot queries the actual "free" USDC balance from Binance every 10 seconds to eliminate data drift.
+* **Quant-Style Dashboard:** Real-time monitoring of Sigma ($\sigma$) levels and market overextension via a dedicated Web App.
+* **HTF Trend Filtering:** EMA 200 (1H) macro-filter ensures entries only occur with institutional bullish momentum support.
+* **Anti-Dust Pro:** Guaranteed 100% position clearing. It queries real-time exchange holdings before every sell execution to prevent leftover "dust" in the portfolio.
+* **Compound Interest Scaling:** Autonomous management of up to 6 slots, auto-adjusting position size as the capital grows.
 
 ## 🏗️ Architecture
 1. Bot Core: Python engine (CCXT) managing logic and market interaction.
@@ -56,7 +61,11 @@ The bot is designed to be flexible and safe for beginners:
 - 🟢 **V4.4:** Backend Core: Integration with FastAPI for monitoring.
 - 🟢 **V5.0:** User Experience: First Web App deployment.
 - 🟢 **V5.1:** **Scalable Code & Titanium Sync:** Multi-slot logic and real-time balance reconciliation.
-- 🟠 **V5.2:** Easy install / Docker-compose orchestration.
+- 🟠 **V5.1.1:** Easy install / Docker-compose orchestration.
+- 🟠 **V5.2:** **Z-Score Entry:** Transition from RSI to Standard Deviation logic ($Z < -2.0\sigma$).
+- ⚪ **V5.3:** **Variable TTP:** Implementation of dynamic Trailing Stop based on ATR (Average True Range).
+- ⚪ **V5.4:** **Bitcoin Shield:** Correlation-based panic filter monitoring BTC health to block altcoin entries during crashes.
+- ⚪ **V6.0:** **Elite Management:** Integration of the Kelly Criterion for risk sizing and Limit Orders (Maker) for fee optimization.
 
 ## 🎓 Maintenance & Development Status
 **ShieldTrade-CE** is a personal learning project and a hobby.
