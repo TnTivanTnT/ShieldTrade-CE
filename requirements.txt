@@ -1,6 +1,7 @@
 ccxt
 pandas
 pandas_ta
+numpy
 requests
 python-dotenv
 fastapi
