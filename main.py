@@ -18,14 +18,14 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 API_KEY = os.getenv("API_KEY")
 SECRET_KEY = os.getenv("SECRET_KEY")
 
-# --- CONFIGURACIÓN MAESTRA V5.2 ---
-SIMULATION = True
+# --- CONFIGURACIÓN MAESTRA V5.2 (Simons Edition) ---
+SIMULATION = False
 TOTAL_BUDGET = 60.72      # Tu capital real tras la venta
 BASE_SLOT_USDC = 14.40     
 MAX_SLOTS_LIMIT = 6        
 
 PAIRS = ['SOL/USDC', 'ETH/USDC']
-Z_SCORE_ENTRY = -2.0     
+Z_SCORE_ENTRY = -2.0       # Punto de "pánico estadístico" (95% prob. rebote)
 DCA_DROP_PERCENT = 0.03
 PROFIT_MARGIN = 0.015
 TRAILING_GAP = 0.003
