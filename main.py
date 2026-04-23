@@ -19,7 +19,7 @@ API_KEY = os.getenv("API_KEY")
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # --- CONFIGURACIÓN MAESTRA V5.2 (Simons Edition) ---
-SIMULATION = False
+SIMULATION = True
 TOTAL_BUDGET = 60.72      # Tu capital real tras la venta
 BASE_SLOT_USDC = 14.40     
 MAX_SLOTS_LIMIT = 6        
