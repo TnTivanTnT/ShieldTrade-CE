@@ -5,6 +5,7 @@ import requests
 import time
 import json
 import os
+import shutil  # <-- LIBRERÍA NUEVA PARA COPIAR ARCHIVOS
 import csv
 import threading
 from datetime import datetime
@@ -22,12 +23,24 @@ class NodeConfig:
     total_budget_sim = 0.0
 
 env_path = "/app/.env"
-# Si el .env existe, lo carga. Si no, set_key lo creará luego.
-if os.path.exists(env_path):
-    load_dotenv(env_path)
+example_env_path = "/app/.env.example"
+
+# --- AUTOCREACIÓN DEL .ENV ---
+# Si el usuario no ha creado el .env a mano, el bot lo hace por él
+if not os.path.exists(env_path):
+    if os.path.exists(example_env_path):
+        shutil.copy(example_env_path, env_path)
+        print("📁 Archivo .env autogenerado desde .env.example")
+    else:
+        # Si por algún casual tampoco existe el example, crea uno vacío
+        open(env_path, 'w').close()
+        print("📁 Archivo .env creado desde cero")
+
+load_dotenv(env_path)
 
 NodeConfig.api_key = os.getenv("API_KEY", "")
 NodeConfig.secret_key = os.getenv("SECRET_KEY", "")
+# ... (sigue el resto de tu código normal)
 NodeConfig.total_budget_real = float(os.getenv("TOTAL_BUDGET", "0"))
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
