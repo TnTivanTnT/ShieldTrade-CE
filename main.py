@@ -22,6 +22,7 @@ class NodeConfig:
     total_budget_sim = 0.0
 
 env_path = "/app/.env"
+# Si el .env existe, lo carga. Si no, set_key lo creará luego.
 if os.path.exists(env_path):
     load_dotenv(env_path)
 
@@ -39,8 +40,8 @@ PAIRS = ['SOL/USDC', 'ETH/USDC']
 Z_SCORE_ENTRY = -2.0
 DCA_DROP_PERCENT = 0.03
 PROFIT_MARGIN = 0.015
-ATR_MULTIPLIER = 1.5  # Multiplicador del ATR para el Trailing Gap
-KELLY_FRACTION_MAX = 0.20 # Máximo 20% del capital por trade
+ATR_MULTIPLIER = 1.5  
+KELLY_FRACTION_MAX = 0.20 
 
 exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})
 if NodeConfig.api_key:
@@ -49,23 +50,29 @@ if NodeConfig.api_key:
 
 app = FastAPI()
 
-# --- ENDPOINTS FASTAPI ---
+# --- ENDPOINTS FASTAPI (Actualizado para Telegram) ---
 class ConfigPayload(BaseModel):
     mode: str
     sim_budget: float = None
     api_key: str = None
     secret_key: str = None
     real_budget: float = None
+    telegram_token: str = None
+    telegram_chat_id: str = None
 
 @app.post("/api/config")
 def update_config(payload: ConfigPayload):
+    global TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
+    
     if payload.mode == "init_sim" and payload.sim_budget is not None:
         NodeConfig.total_budget_sim = payload.sim_budget
         state.data['initial_balance'] = payload.sim_budget
         state.data['free_usdc_real'] = payload.sim_budget
         state.save()
         return {"status": "success", "mode": "sim"}
+        
     elif payload.mode == "real":
+        # Guardar en memoria y escribir en el archivo .env físico
         if payload.api_key:
             NodeConfig.api_key = payload.api_key
             set_key(env_path, "API_KEY", payload.api_key)
@@ -77,9 +84,19 @@ def update_config(payload: ConfigPayload):
         if payload.real_budget:
             NodeConfig.total_budget_real = payload.real_budget
             set_key(env_path, "TOTAL_BUDGET", str(payload.real_budget))
+        
+        # Nuevos campos de Telegram
+        if payload.telegram_token:
+            TELEGRAM_TOKEN = payload.telegram_token
+            set_key(env_path, "TELEGRAM_TOKEN", payload.telegram_token)
+        if payload.telegram_chat_id:
+            TELEGRAM_CHAT_ID = payload.telegram_chat_id
+            set_key(env_path, "TELEGRAM_CHAT_ID", payload.telegram_chat_id)
+
         NodeConfig.is_sim = False
         state.load()
         return {"status": "success", "mode": "real"}
+        
     elif payload.mode == "simulation":
         NodeConfig.is_sim = True
         state.load()
@@ -147,13 +164,11 @@ def get_market_data(pair):
         ohlcv = exchange.fetch_ohlcv(pair, timeframe='5m', limit=50)
         df = pd.DataFrame(ohlcv, columns=['time', 'open', 'high', 'low', 'close', 'vol'])
         
-        # Z-Score
         df['sma'] = df['close'].rolling(window=20).mean()
         df['std'] = df['close'].rolling(window=20).std()
         std_val = df['std'].iloc[-1]
         z_score = (df['close'].iloc[-1] - df['sma'].iloc[-1]) / std_val if std_val > 0 else 0
         
-        # ATR para el Trailing Stop Variable
         df.ta.atr(length=14, append=True)
         atr_val = df['ATRr_14'].iloc[-1]
         current_price = ticker['last']
@@ -229,7 +244,6 @@ def trading_node_loop():
                 price_cache[pair] = {"price": price, "z_score": z_score, "atr_gap": dynamic_trailing_gap}
                 pos = state.data['portfolio'][pair]
 
-                # --- 1. TTP VARIABLE VENTA ---
                 if pos['amount'] > 0:
                     if price > pos['max_price_reached']: pos['max_price_reached'] = price
                     target = pos['avg_price'] * (1 + PROFIT_MARGIN)
@@ -263,7 +277,6 @@ def trading_node_loop():
                         send_telegram(f"{mode_str}🟢 VENTA {pair} | +{profit:.2f}$ | T-Gap: {dynamic_trailing_gap*100:.2f}%")
                         state.save()
 
-                # --- 2. COMPRAS Y DCA (Filtro BTC) ---
                 invested_total = sum(d['invested'] for d in state.data['portfolio'].values())
                 used_slots = int(round(invested_total / current_slot_size)) if current_slot_size > 0 else 0
                 
@@ -298,7 +311,6 @@ def trading_node_loop():
             sync_balance(price_cache)
             state.save(live_prices=price_cache)
             
-            # --- 3. LOGS DINÁMICOS EN CONSOLA ---
             now = datetime.now()
             log_str = f"[{now.strftime('%H:%M:%S')}] Cap:{total_cap:.2f}$ | Slot:{current_slot_size:.2f}$ | "
             for pair in PAIRS:
@@ -306,7 +318,6 @@ def trading_node_loop():
                 log_str += f"{pair.split('/')[0]}:{z}σ | "
             print(log_str)
             
-            # --- 4. RECORDATORIO DIARIO ---
             if now.hour == 11 and now.minute == 0 and last_report_day != now.day:
                 mode_str = "[SIM] " if NodeConfig.is_sim else "[REAL] "
                 send_telegram(f"📅 {mode_str}Daily Report V6.0\nEquity: {total_cap:.2f}$\nProfit Total: {state.data['realized_profit']:.2f}$")
