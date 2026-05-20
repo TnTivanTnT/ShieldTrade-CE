@@ -1,10 +1,12 @@
 version: '3.8'
 services:
-  shieldtrade-bot:
+  shieldtrade-hybrid:
     build: .
-    container_name: shieldtrade_v4_boss
-    restart: always
+    container_name: shieldtrade_v6_hybrid
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
     volumes:
-      - ./bot_state.json:/app/bot_state.json
-      - ./trading_history.csv:/app/trading_history.csv
-      - ./logs:/app/logs
+      - ./:/app
+    environment:
+      - TZ=Europe/Madrid

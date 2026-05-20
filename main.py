@@ -5,16 +5,54 @@ import requests
 import time
 import json
 import os
-import shutil  # <-- LIBRERÍA NUEVA PARA COPIAR ARCHIVOS
+import shutil
 import csv
 import threading
+import logging
+from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-# --- CONFIGURACIÓN EN RAM ---
+# --- 1. CONFIGURACIÓN DE DIRECTORIOS Y ENTORNO ---
+env_path = "/app/.env"
+example_env_path = "/app/.env.example"
+data_dir = "/app/data"
+
+# Garantizar la existencia de la carpeta de datos físicos antes de levantar procesos
+os.makedirs(data_dir, exist_ok=True)
+
+# Autoclonado del archivo .env si el contenedor arranca virgen
+if not os.path.exists(env_path):
+    if os.path.exists(example_env_path):
+        shutil.copy(example_env_path, env_path)
+        print("📁 Archivo .env autogenerado desde plantilla .env.example")
+    else:
+        open(env_path, 'w').close()
+        print("📁 Archivo .env creado en blanco (no se encontró plantilla)")
+
+load_dotenv(env_path)
+
+# --- 2. SISTEMA DE LOGS DIARIOS ROTATIVOS (Auditoría Local) ---
+logger = logging.getLogger("ShieldTradeLogger")
+logger.setLevel(logging.INFO)
+
+# Configuración del manejador rotativo por día con retención estricta de 60 días
+log_file_path = os.path.join(data_dir, "shieldtrade.log")
+log_handler = TimedRotatingFileHandler(
+    log_file_path,
+    when="D",
+    interval=1,
+    backupCount=60,
+    encoding="utf-8"
+)
+log_formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+log_handler.setFormatter(log_formatter)
+logger.addHandler(log_handler)
+
+# --- 3. CONFIGURACIÓN ESTRUCTURAL EN RAM ---
 class NodeConfig:
     is_sim = True
     api_key = ""
@@ -22,31 +60,14 @@ class NodeConfig:
     total_budget_real = 0.0
     total_budget_sim = 0.0
 
-env_path = "/app/.env"
-example_env_path = "/app/.env.example"
-
-# --- AUTOCREACIÓN DEL .ENV ---
-# Si el usuario no ha creado el .env a mano, el bot lo hace por él
-if not os.path.exists(env_path):
-    if os.path.exists(example_env_path):
-        shutil.copy(example_env_path, env_path)
-        print("📁 Archivo .env autogenerado desde .env.example")
-    else:
-        # Si por algún casual tampoco existe el example, crea uno vacío
-        open(env_path, 'w').close()
-        print("📁 Archivo .env creado desde cero")
-
-load_dotenv(env_path)
-
 NodeConfig.api_key = os.getenv("API_KEY", "")
 NodeConfig.secret_key = os.getenv("SECRET_KEY", "")
-# ... (sigue el resto de tu código normal)
 NodeConfig.total_budget_real = float(os.getenv("TOTAL_BUDGET", "0"))
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# --- PARÁMETROS V6.0 ---
+# Parámetros del algoritmo cuantitativo
 BASE_SLOT_USDC = 14.40
 MAX_SLOTS_LIMIT = 6
 PAIRS = ['SOL/USDC', 'ETH/USDC']
@@ -63,7 +84,7 @@ if NodeConfig.api_key:
 
 app = FastAPI()
 
-# --- ENDPOINTS FASTAPI (Actualizado para Telegram) ---
+# --- 4. ENDPOINTS API REST (FastAPI) ---
 class ConfigPayload(BaseModel):
     mode: str
     sim_budget: float = None
@@ -82,10 +103,10 @@ def update_config(payload: ConfigPayload):
         state.data['initial_balance'] = payload.sim_budget
         state.data['free_usdc_real'] = payload.sim_budget
         state.save()
+        logger.info(f"Configuración: Simulación inicializada con un presupuesto de {payload.sim_budget} USDC.")
         return {"status": "success", "mode": "sim"}
         
     elif payload.mode == "real":
-        # Guardar en memoria y escribir en el archivo .env físico
         if payload.api_key:
             NodeConfig.api_key = payload.api_key
             set_key(env_path, "API_KEY", payload.api_key)
@@ -97,8 +118,6 @@ def update_config(payload: ConfigPayload):
         if payload.real_budget:
             NodeConfig.total_budget_real = payload.real_budget
             set_key(env_path, "TOTAL_BUDGET", str(payload.real_budget))
-        
-        # Nuevos campos de Telegram
         if payload.telegram_token:
             TELEGRAM_TOKEN = payload.telegram_token
             set_key(env_path, "TELEGRAM_TOKEN", payload.telegram_token)
@@ -108,11 +127,13 @@ def update_config(payload: ConfigPayload):
 
         NodeConfig.is_sim = False
         state.load()
+        logger.info(f"Configuración crítica: El bot ha pasado a MODO REAL con presupuesto base de {payload.real_budget} USDC.")
         return {"status": "success", "mode": "real"}
         
     elif payload.mode == "simulation":
         NodeConfig.is_sim = True
         state.load()
+        logger.info("Configuración: El bot ha retornado a MODO SIMULACIÓN mediante el panel web.")
         return {"status": "success", "mode": "simulation"}
 
 @app.get("/status")
@@ -135,15 +156,16 @@ def send_telegram(message):
     try:
         requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
                       data={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"})
-    except: pass
+    except Exception as e:
+        logger.error(f"Error de comunicación en pasarela Telegram: {e}")
 
-# --- STATE MANAGER ---
+# --- 5. GESTOR DE ESTADO PERSISTENTE ---
 class StateManager:
     def __init__(self):
         self.data = {}
     
     def get_file(self):
-        return "/app/data/bot_state_sim.json" if NodeConfig.is_sim else "/app/data/bot_state.json"
+        return os.path.join(data_dir, "bot_state_sim.json") if NodeConfig.is_sim else os.path.join(data_dir, "bot_state.json")
 
     def load(self):
         file = self.get_file()
@@ -170,7 +192,7 @@ class StateManager:
 
 state = StateManager()
 
-# --- MOTORES DE ANÁLISIS ---
+# --- 6. MOTORES MATEMÁTICOS DE ANÁLISIS ---
 def get_market_data(pair):
     try:
         ticker = exchange.fetch_ticker(pair)
@@ -189,7 +211,7 @@ def get_market_data(pair):
         
         return current_price, round(z_score, 2), atr_pct
     except Exception as e: 
-        print(f"Error Market Data {pair}: {e}")
+        logger.error(f"Error crítico en lectura de mercado para {pair}: {e}")
         return 0, 0, 0.003
 
 def get_btc_trend():
@@ -198,7 +220,8 @@ def get_btc_trend():
         df = pd.DataFrame(ohlcv, columns=['time', 'open', 'high', 'low', 'close', 'vol'])
         df['sma'] = df['close'].rolling(window=20).mean()
         return df['close'].iloc[-1] > df['sma'].iloc[-1]
-    except:
+    except Exception as e:
+        logger.error(f"Error en filtro de correlación BTC (Desbloqueado por seguridad): {e}")
         return True
 
 def calculate_kelly_slot(total_cap):
@@ -228,11 +251,13 @@ def sync_balance(price_cache):
         try:
             bal = exchange.fetch_balance()
             state.data['free_usdc_real'] = bal['USDC']['free']
-        except: pass
+        except Exception as e:
+            logger.error(f"Fallo en sincronización de balance Spot real: {e}")
 
-# --- NODO CENTRAL DE TRADING ---
+# --- 7. NODO CENTRAL DE TRADING (HILO PRINCIPAL) ---
 def trading_node_loop():
     print("🚀 Motor Híbrido V6.0 iniciado (ATR + Kelly + BTC Filter)...")
+    logger.info("Sistema: Motor de ejecución híbrido V6.0 iniciado correctamente.")
     last_report_day = None
 
     while True:
@@ -257,6 +282,7 @@ def trading_node_loop():
                 price_cache[pair] = {"price": price, "z_score": z_score, "atr_gap": dynamic_trailing_gap}
                 pos = state.data['portfolio'][pair]
 
+                # --- MÓDULO DE VENTA (TTP VARIABLE) ---
                 if pos['amount'] > 0:
                     if price > pos['max_price_reached']: pos['max_price_reached'] = price
                     target = pos['avg_price'] * (1 + PROFIT_MARGIN)
@@ -282,14 +308,17 @@ def trading_node_loop():
                         state.data['realized_profit'] += profit
                         pos.update({"amount": 0.0, "invested": 0.0, "avg_price": 0.0, "max_price_reached": 0.0})
                         
-                        csv_file = "/app/data/trading_history_sim.csv" if NodeConfig.is_sim else "/app/data/trading_history_usdc.csv"
+                        csv_file = os.path.join(data_dir, "trading_history_sim.csv" if NodeConfig.is_sim else "trading_history_usdc.csv")
                         with open(csv_file, 'a', newline='') as f:
                             csv.writer(f).writerow([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), pair, 'SELL', price, sell_amt, profit])
                         
                         mode_str = "[SIM] " if NodeConfig.is_sim else "[REAL] "
-                        send_telegram(f"{mode_str}🟢 VENTA {pair} | +{profit:.2f}$ | T-Gap: {dynamic_trailing_gap*100:.2f}%")
+                        log_msg = f"ORDEN DE VENTA: Venta ejecutada en {pair} | Beneficio: +{profit:.2f}$ | T-Gap Variable: {dynamic_trailing_gap*100:.2f}%"
+                        logger.info(mode_str + log_msg)
+                        send_telegram(mode_str + f"🟢 VENTA {pair} | +{profit:.2f}$ | T-Gap: {dynamic_trailing_gap*100:.2f}%")
                         state.save()
 
+                # --- MÓDULO DE COMPRAS (Filtro BTC + DCA) ---
                 invested_total = sum(d['invested'] for d in state.data['portfolio'].values())
                 used_slots = int(round(invested_total / current_slot_size)) if current_slot_size > 0 else 0
                 
@@ -312,18 +341,21 @@ def trading_node_loop():
                         pos['avg_price'] = pos['invested'] / pos['amount']
                         pos['max_price_reached'] = price
                         
-                        csv_file = "/app/data/trading_history_sim.csv" if NodeConfig.is_sim else "/app/data/trading_history_usdc.csv"
+                        csv_file = os.path.join(data_dir, "trading_history_sim.csv" if NodeConfig.is_sim else "trading_history_usdc.csv")
                         with open(csv_file, 'a', newline='') as f:
                             csv.writer(f).writerow([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), pair, 'BUY', price, buy_qty, cost])
 
                         mode_str = "[SIM] " if NodeConfig.is_sim else "[REAL] "
                         tipo = "DCA" if is_dca else "NUEVA"
-                        send_telegram(f"{mode_str}🔵 COMPRA {tipo} {pair} | Z:{z_score}σ | Slot: {cost:.2f}$")
+                        log_msg = f"ORDEN DE COMPRA: Tipo {tipo} en {pair} | Z-Score: {z_score}σ | Tamaño del Slot: {cost:.2f} USDC"
+                        logger.info(mode_str + log_msg)
+                        send_telegram(mode_str + f"🔵 COMPRA {tipo} {pair} | Z:{z_score}σ | Slot: {cost:.2f}$")
                         state.save()
 
             sync_balance(price_cache)
             state.save(live_prices=price_cache)
             
+            # Logs dinámicos exclusivamente por consola de Docker
             now = datetime.now()
             log_str = f"[{now.strftime('%H:%M:%S')}] Cap:{total_cap:.2f}$ | Slot:{current_slot_size:.2f}$ | "
             for pair in PAIRS:
@@ -331,14 +363,17 @@ def trading_node_loop():
                 log_str += f"{pair.split('/')[0]}:{z}σ | "
             print(log_str)
             
+            # REPORTE DIARIO (Sincronizado a las 11:00 AM de España via TZ del contenedor)
             if now.hour == 11 and now.minute == 0 and last_report_day != now.day:
                 mode_str = "[SIM] " if NodeConfig.is_sim else "[REAL] "
+                report_msg = f"Reporte Diario V6.0 -> Patrimonio: {total_cap:.2f}$ | Ganancia Acumulada: {state.data['realized_profit']:.2f}$"
+                logger.info(mode_str + report_msg)
                 send_telegram(f"📅 {mode_str}Daily Report V6.0\nEquity: {total_cap:.2f}$\nProfit Total: {state.data['realized_profit']:.2f}$")
                 last_report_day = now.day
 
             time.sleep(10)
         except Exception as e:
-            print(f"Error Loop: {e}")
+            print(f"Error en Loop: {e}")
             time.sleep(10)
 
 threading.Thread(target=trading_node_loop, daemon=True).start()

@@ -207,10 +207,12 @@ marimo/_lsp/
 __marimo__/
 
 # --- ShieldTrade-CE Specific Data ---
-bot_state.json
-trading_history.csv
-logs/*.log
-bot_core/logs/
-keys.py
+# Ignorar toda la carpeta de memoria dinámica
+data/
+
+# Ignorar archivos de estado residuales por seguridad
+bot_state*.json
+trading_history*.csv
+
+# Archivos de entorno y seguridad
 .env
-.python-version
