@@ -3,203 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShieldTrade</title>
+    <title>ShieldTrade Híbrido</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .status-pulse { animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-        button.active { background-color: #3b82f6; color: white; border-color: #60a5fa; }
-        .font-mono { font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace; }
-    </style>
+    <style>.font-mono { font-family: 'Courier New', monospace; }</style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen font-sans p-2">
-    <div class="max-w-4xl mx-auto">
-        <header class="flex justify-between items-center mb-4 px-2">
-            <h1 class="text-xl font-bold text-blue-400 italic tracking-tight">
-                🛡️ SHIELDTRADE <span class="text-[10px] text-gray-500 not-italic font-normal">V5.2</span>
-            </h1>
-            <div class="bg-gray-800 px-3 py-1 rounded-full text-[10px] flex items-center border border-gray-700">
-                <span class="w-2 h-2 bg-green-500 rounded-full mr-2 status-pulse"></span> ESTRATEGIA CUANTITATIVA
-            </div>
-        </header>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
-            <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
-                <p class="text-gray-500 text-[9px] uppercase font-black tracking-wider">Patrimonio Total</p>
-                <h2 id="total-equity" class="text-lg md:text-2xl font-mono">0.00$</h2>
-            </div>
-            <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
-                <p class="text-gray-500 text-[9px] uppercase font-black tracking-wider">Net Profit (V5.2)</p>
-                <h2 id="realized-profit" class="text-lg md:text-2xl font-mono text-gray-400">0.00$</h2>
-            </div>
-            <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 col-span-2 md:col-span-1 flex justify-between items-center">
-                <div>
-                    <p class="text-gray-500 text-[9px] uppercase font-black tracking-wider">Slots</p>
-                    <h2 id="slots-count" class="text-lg font-mono text-blue-400">0/0</h2>
-                </div>
-                <div class="text-right">
-                    <p class="text-gray-500 text-[9px] uppercase font-black tracking-wider">USDC Real (Binance)</p>
-                    <h2 id="free-cash" class="text-sm font-mono text-gray-300">0$</h2>
-                </div>
+    <header class="flex justify-between items-center mb-4 px-2 max-w-4xl mx-auto">
+        <h1 class="text-xl font-bold text-blue-400 italic">🛡️ SHIELDTRADE</h1>
+        <div class="flex items-center gap-2">
+            <span id="mode-label" class="text-xs font-bold text-yellow-400">MODO SIMULACIÓN</span>
+            <button id="toggle-mode" onclick="switchMode()" class="w-12 h-6 bg-yellow-500 rounded-full relative transition-colors border border-gray-600">
+                <div id="toggle-knob" class="w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-transform"></div>
+            </button>
+        </div>
+    </header>
+
+    <div class="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
+            <p class="text-gray-500 text-[9px] uppercase font-black">Patrimonio Total</p>
+            <h2 id="total-equity" class="text-lg md:text-2xl font-mono">0.00$</h2>
+        </div>
+        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
+            <p class="text-gray-500 text-[9px] uppercase font-black">Profit</p>
+            <h2 id="realized-profit" class="text-lg md:text-2xl font-mono">0.00$</h2>
+        </div>
+        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700 col-span-2 md:col-span-1 flex justify-between items-center">
+            <div><p class="text-gray-500 text-[9px] uppercase font-black">Slots</p><h2 id="slots-count" class="text-lg font-mono text-blue-400">0/0</h2></div>
+            <div class="text-right"><p class="text-gray-500 text-[9px] uppercase font-black">USDC Libre</p><h2 id="free-cash" class="text-sm font-mono text-gray-300">0$</h2></div>
+        </div>
+    </div>
+
+    <div id="market-grid" class="max-w-4xl mx-auto grid grid-cols-2 gap-2"></div>
+
+    <div id="sim-modal" class="fixed inset-0 bg-black/90 hidden flex justify-center items-center z-50">
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 w-80 text-center">
+            <h2 class="text-xl font-bold text-yellow-400 mb-2">Modo Simulación</h2>
+            <p class="text-xs text-gray-400 mb-6">Introduce el capital ficticio con el que quieres arrancar las pruebas.</p>
+            <input type="number" id="sim_budget" placeholder="Ej: 1000" class="w-full bg-gray-900 border border-gray-600 rounded p-3 mb-4 text-center text-lg font-mono">
+            <button onclick="initSim()" class="w-full bg-yellow-500 text-gray-900 py-3 rounded font-bold hover:bg-yellow-400">Arrancar Motor</button>
+        </div>
+    </div>
+
+    <div id="real-modal" class="fixed inset-0 bg-black/90 hidden flex justify-center items-center z-50 p-4">
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 w-full max-w-sm">
+            <h2 class="text-xl font-bold text-red-500 mb-2">⚠️ Transición a Real</h2>
+            <p class="text-xs text-gray-400 mb-4">Las credenciales se guardarán automáticamente en tu archivo .env</p>
+            
+            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Binance API</p>
+            <input type="text" id="api_key" placeholder="API Key" class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-sm font-mono">
+            <input type="password" id="secret_key" placeholder="Secret Key" class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-4 text-sm font-mono">
+            
+            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Capital Real Disponible</p>
+            <input type="number" id="real_budget" placeholder="Ej. 60.72" class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-4 text-sm font-mono">
+
+            <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">Telegram (Opcional)</p>
+            <input type="text" id="tg_token" placeholder="Bot Token" class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-sm font-mono">
+            <input type="text" id="tg_chat" placeholder="Chat ID" class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-4 text-sm font-mono">
+
+            <div class="flex gap-2 mt-4">
+                <button onclick="closeRealModal()" class="w-1/2 bg-gray-700 py-2 rounded text-sm font-bold hover:bg-gray-600">Cancelar</button>
+                <button onclick="initReal()" class="w-1/2 bg-red-600 py-2 rounded text-sm font-bold hover:bg-red-500">Activar Bot</button>
             </div>
         </div>
-
-        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-4">
-            <div class="flex justify-between items-center mb-4">
-                <select id="rangeSelector" onchange="loadHistory()" class="bg-gray-700 text-[10px] rounded px-2 py-1 outline-none border-none cursor-pointer">
-                    <option value="1d">24 Horas</option>
-                    <option value="1w">Semana</option>
-                    <option value="1m">Mes</option>
-                    <option value="all">Histórico Total</option>
-                </select>
-                <div class="flex gap-1">
-                    <button id="btn-val" onclick="toggleMode('val')" class="active border border-gray-600 px-3 py-1 rounded text-[9px] uppercase transition-all">USD</button>
-                    <button id="btn-pct" onclick="toggleMode('pct')" class="border border-gray-600 px-3 py-1 rounded text-[9px] uppercase transition-all">%</button>
-                </div>
-            </div>
-            <div style="height: 180px;"><canvas id="mainChart"></canvas></div>
-        </div>
-
-        <div id="market-grid" class="grid grid-cols-2 gap-2">
-            </div>
     </div>
 
     <script>
-        let mainChart; 
-        let chartMode = 'val';
-
-        function initChart() {
-            const ctx = document.getElementById('mainChart').getContext('2d');
-            mainChart = new Chart(ctx, {
-                type: 'line',
-                data: { 
-                    labels: [], 
-                    datasets: [{ 
-                        data: [], 
-                        borderColor: '#3b82f6', 
-                        backgroundColor: 'rgba(59, 130, 246, 0.05)', 
-                        fill: true, 
-                        tension: 0.4, 
-                        borderWidth: 2, 
-                        pointRadius: 0 
-                    }] 
-                },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false, 
-                    plugins: { legend: { display: false } }, 
-                    scales: { 
-                        x: { display: false }, 
-                        y: { 
-                            grid: { color: '#1f2937' }, 
-                            ticks: { font: { size: 9 }, color: '#9ca3af' } 
-                        } 
-                    } 
-                }
-            });
-        }
-
-        async function loadHistory() {
-            const range = document.getElementById('rangeSelector').value;
-            try {
-                const res = await fetch(`/history?range=${range}`);
-                const history = await res.json();
-                if (history.length === 0) return;
-
-                mainChart.data.labels = history.map(h => h.timestamp);
-                if (chartMode === 'val') { 
-                    mainChart.data.datasets[0].data = history.map(h => h.total_usdc); 
-                } else { 
-                    const start = history[0].total_usdc; 
-                    mainChart.data.datasets[0].data = history.map(h => ((h.total_usdc / start) - 1) * 100); 
-                }
-                mainChart.update();
-            } catch (e) { console.error("Error cargando historial:", e); }
-        }
+        let isSim = true;
+        let hasApi = false;
 
         async function updateStatus() {
             try {
-                const res = await fetch('/status'); 
-                const data = await res.json();
-                if (data.error) return;
+                const res = await fetch('/status');
+                const state = await res.json();
+                
+                isSim = state.is_sim;
+                hasApi = state.has_api;
 
-                let coinVal = 0;
-                for(let p in data.portfolio) { 
-                    coinVal += data.portfolio[p].amount * (data.current_market_prices[p]?.price || 0);
+                if (state.needs_sim_setup) {
+                    document.getElementById('sim-modal').classList.remove('hidden');
+                    return;
+                } else {
+                    document.getElementById('sim-modal').classList.add('hidden');
                 }
 
+                const toggleBg = document.getElementById('toggle-mode');
+                const toggleKnob = document.getElementById('toggle-knob');
+                const modeLabel = document.getElementById('mode-label');
+
+                if (isSim) {
+                    toggleBg.className = "w-12 h-6 bg-yellow-500 rounded-full relative transition-colors border border-yellow-600";
+                    toggleKnob.className = "w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-transform";
+                    modeLabel.innerText = "MODO SIMULACIÓN";
+                    modeLabel.className = "text-xs font-bold text-yellow-400";
+                } else {
+                    toggleBg.className = "w-12 h-6 bg-red-600 rounded-full relative transition-colors border border-red-700";
+                    toggleKnob.className = "w-4 h-4 bg-white rounded-full absolute top-1 translate-x-6 transition-transform";
+                    modeLabel.innerText = "MODO REAL ACTIVO";
+                    modeLabel.className = "text-xs font-bold text-red-500";
+                }
+
+                const data = state.data;
                 const freeCash = data.free_usdc_real || 0;
+                let coinVal = 0;
+                for(let p in data.portfolio) { coinVal += data.portfolio[p].amount * (data.current_market_prices?.[p]?.price || 0); }
+                
                 const eq = freeCash + coinVal; 
-                const netProfit = eq - data.initial_balance;
                 const totalCap = data.initial_balance + data.realized_profit;
+                const netProfit = eq - data.initial_balance;
 
                 document.getElementById('total-equity').innerText = eq.toFixed(2) + '$';
                 document.getElementById('free-cash').innerText = freeCash.toFixed(2) + '$';
-
-                const profitElement = document.getElementById('realized-profit');
-                profitElement.innerText = (netProfit >= 0 ? '+' : '') + netProfit.toFixed(2) + '$';
-                profitElement.className = `text-lg md:text-2xl font-mono ${netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
-
-                // Gestión de Slots V5.2
-                const baseSlot = 14.40;
-                const maxLimit = 6;
-                let maxSlots, slotSize;
-                if (totalCap < (baseSlot * maxLimit)) {
-                    maxSlots = Math.floor(totalCap / baseSlot); 
-                    slotSize = baseSlot;
-                } else {
-                    maxSlots = maxLimit; 
-                    slotSize = totalCap / maxLimit;
-                }
-
-                const investedAmount = totalCap - freeCash;
-                const usedSlots = Math.round(investedAmount / slotSize);
-                document.getElementById('slots-count').innerText = `${usedSlots} / ${maxSlots}`;
+                const profitEl = document.getElementById('realized-profit');
+                profitEl.innerText = (netProfit >= 0 ? '+' : '') + netProfit.toFixed(2) + '$';
+                profitEl.className = `text-lg md:text-2xl font-mono ${netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
                 
-                // Generar Grid de Monedas con Z-Score
                 let gridHtml = '';
                 for (const p in data.portfolio) {
-                    const coin = p.split('/')[0]; 
-                    const m = data.current_market_prices[p] || {price: 0, z_score: 0};
+                    const coin = p.split('/')[0];
+                    const m = data.current_market_prices?.[p] || {price: 0, z_score: 0};
                     const inPos = data.portfolio[p].amount > 0;
-                    const isOverstretched = m.z_score <= -2.0; // Pánico estadístico
-
                     gridHtml += `
-                        <div class="bg-gray-800 p-3 rounded-xl border ${inPos ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : 'border-gray-700'}">
+                        <div class="bg-gray-800 p-3 rounded-xl border ${inPos ? 'border-blue-500' : 'border-gray-700'}">
                             <div class="flex justify-between items-center mb-1">
-                                <span class="text-[10px] font-bold text-gray-400 tracking-widest">${coin}</span>
-                                <span class="text-[9px] px-1.5 rounded ${isOverstretched ? 'bg-green-900/50 text-green-400 font-bold border border-green-500' : 'text-gray-500'}">
-                                    ${m.z_score}σ
-                                </span>
+                                <span class="text-[10px] font-bold text-gray-400">${coin}</span>
+                                <span class="text-[9px] ${m.z_score <= -2.0 ? 'text-green-400 font-bold' : 'text-gray-500'}">${m.z_score}σ</span>
                             </div>
                             <p class="text-sm font-mono font-bold">${m.price.toFixed(2)}$</p>
-                            <div class="flex justify-between items-center mt-2">
-                                <span class="text-[8px] uppercase text-gray-500">${inPos ? 'PnL' : 'Análisis'}</span>
-                                <span class="text-[9px] font-mono font-bold ${inPos ? (m.price >= data.portfolio[p].avg_price ? 'text-green-400' : 'text-red-400') : 'text-blue-400'}">
-                                    ${inPos ? (((m.price / data.portfolio[p].avg_price) - 1) * 100).toFixed(2) + '%' : 'ESTADÍSTICA'}
-                                </span>
-                            </div>
                         </div>`;
                 }
                 document.getElementById('market-grid').innerHTML = gridHtml;
-            } catch (e) { console.error("Error en actualización:", e); }
+            } catch (e) {}
         }
 
-        function toggleMode(m) { 
-            chartMode = m; 
-            document.getElementById('btn-val').classList.toggle('active', m === 'val'); 
-            document.getElementById('btn-pct').classList.toggle('active', m === 'pct'); 
-            loadHistory(); 
+        async function initSim() {
+            const bud = document.getElementById('sim_budget').value;
+            if(!bud) return;
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mode: "init_sim", sim_budget: parseFloat(bud) })
+            });
+            updateStatus();
         }
 
-        window.onload = () => { 
-            initChart(); 
-            loadHistory(); 
-            updateStatus(); 
-            setInterval(updateStatus, 10000); 
-            setInterval(loadHistory, 300000); // Historial cada 5 min
-        };
+        function switchMode() {
+            if (isSim) {
+                if (!hasApi) document.getElementById('real-modal').classList.remove('hidden');
+                else sendModeChange("real");
+            } else {
+                sendModeChange("simulation");
+            }
+        }
+
+        function closeRealModal() { document.getElementById('real-modal').classList.add('hidden'); }
+
+        async function initReal() {
+            const api = document.getElementById('api_key').value;
+            const sec = document.getElementById('secret_key').value;
+            const bud = document.getElementById('real_budget').value;
+            const tgToken = document.getElementById('tg_token').value;
+            const tgChat = document.getElementById('tg_chat').value;
+
+            if(!api || !sec || !bud) { alert("Las claves de Binance y el capital son obligatorios."); return; }
+            
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    mode: "real", 
+                    api_key: api, 
+                    secret_key: sec, 
+                    real_budget: parseFloat(bud),
+                    telegram_token: tgToken || null,
+                    telegram_chat_id: tgChat || null
+                })
+            });
+            closeRealModal();
+            updateStatus();
+        }
+
+        async function sendModeChange(mode) {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mode: mode })
+            });
+            updateStatus();
+        }
+
+        setInterval(updateStatus, 3000);
+        updateStatus();
     </script>
 </body>
 </html>
